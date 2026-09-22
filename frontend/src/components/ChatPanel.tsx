@@ -178,7 +178,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="输入您的问题... (支持中/英/西/法/德/阿)"
+                placeholder="输入您的问题... (支持中/英/西/法/德)"
                 rows={1}
                 className="w-full px-4 py-3 pr-12 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm"
                 disabled={loading}

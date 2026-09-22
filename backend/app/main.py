@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="跨境电商多语言智能客服与运营Agent - 6语言客服 + Listing生成 + 评论分析 + 广告词生成",
+    description="跨境电商多语言智能客服与运营Agent - 5语言客服 + Listing生成 + 评论分析 + 广告词生成",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",

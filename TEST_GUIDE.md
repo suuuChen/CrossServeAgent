@@ -469,8 +469,8 @@ python scripts\full_test.py
 
 | # | 测试项 | 命令 | 预期结果 | 实测结果 |
 |---|--------|------|----------|----------|
-| 69 | 语言分布统计 | 3.14 | distribution 为 dict | ✅ es=3, de=3, fr=3, ar=3, zh=27, en=86 |
-| 70 | 语言分布 ≥ 5 项 | 3.14 | 6 种语言 (zh/en/es/fr/de/ar) | ✅ 6 种语言全覆盖 |
+| 69 | 语言分布统计 | 3.14 | distribution 为 dict | ✅ es=3, de=3, fr=3, zh=30, en=86 |
+| 70 | 语言分布 = 5 项 | 3.14 | 5 种语言 (zh/en/es/fr/de) | ✅ 5 种语言全覆盖 |
 | 71 | 意图分布统计 | 3.14 | distribution 为 dict, 覆盖 7 种 intent | ✅ general_faq=89, order_query=12, return_policy=9 等 7 种 |
 
 ### 4.16 小时趋势与客服效率
@@ -564,7 +564,7 @@ python -c "import sys;sys.path.insert(0,'.');from app.models import Product,Orde
 | 13 | FAQ 关键词准确匹配 | "支付方式"/"尺码"/"价格" 不再误转人工 | ✅ |
 | 14 | 纯问候不触发转人工 | "你好"/"hello" 走 general_faq 不转人工 | ✅ |
 | 15 | FAQ/商品搜索 SQL 正确 | CAST 语法兼容 asyncpg | ✅ |
-| 16 | 多语言支持 (EN/ES/FR/DE/AR) | 4.7 节 6 项测试全部正确识别 | ✅ |
+| 16 | 多语言支持 (EN/ES/FR/DE) | 4.7 节 5 项测试全部正确识别 | ✅ |
 | 17 | 自动语言检测 | 英文输入在中文 session 中自动识别 | ✅ |
 | 18 | 合规文本检测（安全/违规） | 4.8 节 6 项测试 blocked 状态正确 | ✅ |
 | 19 | Chat 级合规拦截 | 违规内容 compliance_blocked=true | ✅ |
@@ -576,7 +576,7 @@ python -c "import sys;sys.path.insert(0,'.');from app.models import Product,Orde
 | 25 | 评论分析（情感/主题聚类/模拟数据） | 4.12 节 6 项测试全部通过 | ✅ |
 | 26 | 广告词生成（多变体/字符限制/合规） | 4.13 节 7 项测试全部通过 | ✅ |
 | 27 | 运营仪表盘 & 时间过滤 | 4.14 节 3 项测试, 全量+24h | ✅ |
-| 28 | 语言 & 意图分布统计 | 4.15 节 3 项, 6 语言 + 7 意图 | ✅ |
+| 28 | 语言 & 意图分布统计 | 4.15 节 3 项, 5 语言 + 7 意图 | ✅ |
 | 29 | 小时趋势 & 客服效率 | 4.16 节 4 项, 含置信度分布 | ✅ |
 | 30 | 数据导出（JSON/CSV/过滤） | 4.17 节 3 项测试 | ✅ |
 | 31 | 系统监控指标暴露 | 4.18 节 3 项, 含 6 组限流器配置 | ✅ |
