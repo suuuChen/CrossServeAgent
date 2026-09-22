@@ -368,7 +368,7 @@ async def index_all_faqs(db: AsyncSession = Depends(get_db)):
 async def query_audit_logs(
     event_type: Optional[str] = Query(None, description="事件类型: chat/compliance_blocked/human_transfer"),
     session_id: Optional[str] = Query(None, description="会话ID过滤"),
-    language: Optional[str] = Query(None, description="语言过滤: zh/en/es/fr/de/ar"),
+    language: Optional[str] = Query(None, description="语言过滤: zh/en/es/fr/de"),
     hours: Optional[int] = Query(None, ge=1, le=720, description="最近N小时（默认全部）"),
     limit: int = Query(100, ge=1, le=500, description="返回数量"),
     db: AsyncSession = Depends(get_db)

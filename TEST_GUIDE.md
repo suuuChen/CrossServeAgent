@@ -153,10 +153,6 @@ python -c "import urllib.request,json;req=urllib.request.Request('http://localho
 ```
 
 ```cmd
-python -c "import urllib.request,json;req=urllib.request.Request('http://localhost:8000/api/v1/chat',data=json.dumps({'message':'كيف أتتبع طلبي','language':'ar'}).encode(),headers={'Content-Type':'application/json'});d=json.loads(urllib.request.urlopen(req).read());print('intent:',d['intent'],'language:',d.get('language'),'transfer:',d['should_transfer'])"
-```
-
-```cmd
 python -c "import urllib.request,json;req=urllib.request.Request('http://localhost:8000/api/v1/chat',data=json.dumps({'message':'I want to return this item please','language':'zh'}).encode(),headers={'Content-Type':'application/json'});d=json.loads(urllib.request.urlopen(req).read());print('intent:',d['intent'],'language:',d.get('language'),'transfer:',d['should_transfer'])"
 ```
 
@@ -394,8 +390,7 @@ python scripts\full_test.py
 | 26 | Spanish chat (shipping) | 3.7 | language=es | ✅ language=es |
 | 27 | French chat (return) | 3.7 | language=fr | ✅ language=fr |
 | 28 | German chat (product) | 3.7 | language=de | ✅ language=de |
-| 29 | Arabic chat (general) | 3.7 | language=ar | ✅ language=ar |
-| 30 | Auto-detect language (EN→ZH) | 3.7 | language=en/zh | ✅ 自动检测成功 |
+| 29 | Auto-detect language (EN→ZH) | 3.7 | language=en/zh | ✅ 自动检测成功 |
 
 ### 4.8 合规过滤
 
@@ -508,7 +503,7 @@ python scripts\full_test.py
 | # | 测试项 | 命令 | 预期结果 | 实测结果 |
 |---|--------|------|----------|----------|
 | 82 | 健康检查完整详情 | 3.16 | status=healthy, 含 services | ✅ status=healthy, version=1.0.0 |
-| 83 | 支持语言 ≥ 5 种 | 3.16 | languages_supported ≥ 5 | ✅ ["zh","en","es","fr","de","ar"] = 6 种 |
+| 83 | 支持语言 = 5 种 | 3.16 | languages_supported = 5 | ✅ ["zh","en","es","fr","de"] = 5 种 |
 | 84 | 所有服务列出 | 3.16 | services 含 database/redis/llm/embedding | ✅ 四项齐全 |
 
 ### 4.20 根端点（模块验证）
