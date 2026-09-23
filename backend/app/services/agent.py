@@ -3,7 +3,7 @@
 整合: 客服编排 + 转人工会话管理 + 订单查询
 """
 
-from typing import Tuple, Optional, List, Dict
+from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -83,7 +83,11 @@ class CustomerServiceAgent:
                 session['language_detected'] = detected_lang
 
         try:
-            compliance_result = self.compliance.check(user_query, language=detected_lang)
+            has_order_no = bool(re.search(r'(ORD[-–—]?\d{8}[-–—]?\d{3})', user_query, re.IGNORECASE))
+            compliance_result = self.compliance.check(
+                user_query, language=detected_lang,
+                use_llm=not has_order_no
+            )
             if compliance_result["blocked"]:
                 processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
@@ -234,6 +238,27 @@ class CustomerServiceAgent:
                         processing_time_ms=order_result.get('processing_time_ms')
                     )
                     return order_result
+
+                if intent_result['intent'] == IntentType.SHIPPING_QUERY:
+                    print(f"[Agent] Handling SHIPPING_QUERY intent for: {user_query[:50]}")
+                    shipping_result = await self._handle_shipping_query(
+                        session_id, user_query, intent_result, detected_lang, start_time
+                    )
+
+                    await AuditLogger.log_event(
+                        db=self.db,
+                        event_type="chat",
+                        session_id=session_id,
+                        user_query=user_query,
+                        response=shipping_result.get('response'),
+                        intent=intent_result['intent'].value,
+                        language=detected_lang,
+                        confidence=intent_result['confidence'],
+                        should_transfer=False,
+                        compliance_blocked=False,
+                        processing_time_ms=shipping_result.get('processing_time_ms')
+                    )
+                    return shipping_result
 
                 if intent_result['should_transfer']:
                     result = await self._handle_human_transfer(
@@ -649,6 +674,112 @@ class CustomerServiceAgent:
         else:
             response = f"订单信息：{order_data['order_no']} 状态:{status_text} 金额:{order_data['total_amount']}"
 
+        return response
+
+    async def _handle_shipping_query(
+        self,
+        session_id: str,
+        user_query: str,
+        intent_result: Dict,
+        language: str,
+        start_time: datetime
+    ) -> Dict:
+        order_no = self._extract_order_no(user_query)
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        if not order_no:
+            session = CustomerServiceAgent._sessions.get(session_id, {})
+            rag_result = await self.rag_retriever.retrieve_and_generate(
+                user_query=user_query,
+                language=language,
+                conversation_history=session.get('history', [])
+            )
+            await self._update_session_history(session_id, user_query, rag_result['response'])
+            return {
+                'session_id': session_id,
+                'response': TimezoneService.append_timezone_promise(rag_result['response'], language),
+                'intent': IntentType.SHIPPING_QUERY.value,
+                'confidence': intent_result['confidence'],
+                'rag_confidence': rag_result.get('confidence_score', 0),
+                'language': language,
+                'should_transfer': False,
+                'processing_time_ms': int(processing_time),
+                'context_used': {'products_found': 0, 'faqs_found': 0},
+                'success': rag_result.get('success', True)
+            }
+
+        order_data = await self._query_order_from_db(order_no)
+
+        if not order_data:
+            return {
+                'session_id': session_id,
+                'response': TimezoneService.append_timezone_promise(
+                    self._get_order_not_found_response(language, order_no=order_no), language
+                ),
+                'intent': IntentType.SHIPPING_QUERY.value,
+                'confidence': intent_result['confidence'],
+                'rag_confidence': 0.0,
+                'language': language,
+                'should_transfer': False,
+                'processing_time_ms': int(processing_time),
+                'context_used': {'products_found': 0, 'faqs_found': 0, 'orders_found': 0},
+                'success': True
+            }
+
+        response_text = self._format_shipping_response(order_data, language)
+        await self._update_session_history(session_id, user_query, response_text)
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        return {
+            'session_id': session_id,
+            'response': TimezoneService.append_timezone_promise(response_text, language),
+            'intent': IntentType.SHIPPING_QUERY.value,
+            'confidence': intent_result['confidence'],
+            'rag_confidence': 1.0,
+            'language': language,
+            'should_transfer': False,
+            'processing_time_ms': int(processing_time),
+            'context_used': {'products_found': 0, 'faqs_found': 0, 'orders_found': 1},
+            'success': True
+        }
+
+    def _format_shipping_response(self, order_data: Dict, language: str) -> str:
+        status_map = {
+            'zh': {'pending': '待处理', 'paid': '已支付', 'shipped': '已发货', 'delivered': '已送达', 'cancelled': '已取消'},
+            'en': {'pending': 'Pending', 'paid': 'Paid', 'shipped': 'Shipped', 'delivered': 'Delivered', 'cancelled': 'Cancelled'},
+            'es': {'pending': 'Pendiente', 'paid': 'Pagado', 'shipped': 'Enviado', 'delivered': 'Entregado', 'cancelado': 'Cancelado'},
+            'fr': {'pending': 'En attente', 'payé': 'Payé', 'expédié': 'Expédié', 'livré': 'Livré', 'annulé': 'Annulé'},
+            'de': {'pending': 'Ausstehend', 'bezahlt': 'Bezahlt', 'versandet': 'Versendet', 'geliefert': 'Geliefert', 'storniert': 'Storniert'}
+        }
+        order_status_texts = status_map.get(language, status_map['zh'])
+        order_status_text = order_status_texts.get(order_data['status'], order_data['status'])
+
+        if language == 'zh':
+            response = f"订单 {order_data['order_no']} 的物流信息：\n\n"
+            response += f"订单状态：{order_status_text}\n"
+            if order_data.get('shipment'):
+                ship = order_data['shipment']
+                response += f"快递公司：{ship['carrier']}\n"
+                response += f"运单号：{ship['tracking_number']}\n"
+                if ship.get('estimated_delivery'):
+                    response += f"预计送达：{ship['estimated_delivery'][:10]}\n"
+            else:
+                response += "暂无物流信息，订单可能尚未发货。\n"
+            response += "\n如需帮助，请随时告诉我！"
+        elif language == 'en':
+            response = f"Shipping for order {order_data['order_no']}:\n\n"
+            response += f"Order Status: {order_status_text}\n"
+            if order_data.get('shipment'):
+                ship = order_data['shipment']
+                response += f"Carrier: {ship['carrier']}\n"
+                response += f"Tracking No: {ship['tracking_number']}\n"
+                if ship.get('estimated_delivery'):
+                    response += f"Est. Delivery: {ship['estimated_delivery'][:10]}\n"
+            else:
+                response += "No shipping info yet. Order may not have shipped.\n"
+            response += "\nLet me know if you need anything else!"
+        else:
+            response = self._format_order_response(order_data, language)
         return response
 
     def _get_order_not_found_response(self, language: str, need_order_no: bool = False, order_no: str = None) -> str:

@@ -34,7 +34,7 @@ async def import_products():
     """Import 50 sample products from JSON file"""
     
     # Load product data
-    test_data_path = os.path.join(SCRIPT_DIR, 'test_data', 'sample_products.json')
+    test_data_path = os.path.join(os.path.dirname(SCRIPT_DIR), 'test_data', 'sample_products.json')
     with open(test_data_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     

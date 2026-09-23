@@ -6,7 +6,13 @@
 from typing import List
 import numpy as np
 import hashlib
+import os
+import threading
 from app.config import settings
+
+
+HF_OFFLINE = os.environ.get("HF_HUB_OFFLINE", "1") == "1"
+HF_TIMEOUT = int(os.environ.get("HF_DOWNLOAD_TIMEOUT", "15"))
 
 
 class EmbeddingService:
@@ -17,8 +23,7 @@ class EmbeddingService:
     
     策略：
     1. 优先使用本地 sentence-transformers 模型（无需API key）
-    2. 可选降级到 OpenAI API（需要有效key）
-    3. 最终降级到哈希向量（保证可用性）
+    2. 加载失败快速降级到哈希向量（保证可用性，不阻塞）
     """
 
     def __init__(self):
@@ -28,25 +33,46 @@ class EmbeddingService:
         self.dimension = settings.vector_dimension
         self.use_local_model = True
         self._model_loaded = False
+        self._load_attempted = False
 
     def _ensure_model_loaded(self):
-        """延迟加载本地模型（首次使用时才加载）"""
+        """延迟加载本地模型（首次使用时才加载，带超时保护）"""
         if self._model_loaded:
             return
 
-        try:
-            print("Loading local embedding model (sentence-transformers)...")
-            from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-            self.dimension = self.model.get_sentence_embedding_dimension()
-            print(f"Local model loaded successfully (dimension={self.dimension})")
-            self._model_loaded = True
-            self.use_local_model = True
-        except Exception as e:
-            print(f"Failed to load local model: {e}")
-            print("Falling back to hash-based embeddings")
-            self._model_loaded = True
+        if self._load_attempted:
+            return
+
+        self._load_attempted = True
+
+        def _do_load():
+            try:
+                print("[Embedding] Loading local sentence-transformers model (offline mode)...")
+                os.environ.setdefault("HF_HUB_OFFLINE", "1")
+                os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer(
+                    "paraphrase-multilingual-MiniLM-L12-v2",
+                    device="cpu"
+                )
+                self.dimension = self.model.get_sentence_embedding_dimension()
+                print(f"[Embedding] Local model loaded OK (dim={self.dimension})")
+                self.use_local_model = True
+            except Exception as e:
+                print(f"[Embedding] Local model unavailable: {e}")
+                print("[Embedding] Falling back to hash-based embeddings (fast, offline)")
+                self.use_local_model = False
+            finally:
+                self._model_loaded = True
+
+        loader = threading.Thread(target=_do_load, daemon=True)
+        loader.start()
+        loader.join(timeout=HF_TIMEOUT)
+
+        if not self._model_loaded:
+            print(f"[Embedding] Model load timed out after {HF_TIMEOUT}s, using hash fallback")
             self.use_local_model = False
+            self._model_loaded = True
 
     async def embed_text(self, text: str) -> List[float]:
         """

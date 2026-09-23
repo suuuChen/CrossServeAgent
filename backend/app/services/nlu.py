@@ -181,11 +181,21 @@ class IntentRouter:
             },
 
             IntentType.PRODUCT_SEARCH: {
-                'zh': ['产品', '商品', '找', '搜索', '有没有', '推荐'],
-                'en': ['product', 'item', 'search for', 'looking for', 'recommend'],
-                'es': ['producto', 'artículo', 'buscar', 'recomendar'],
-                'fr': ['produit', 'article', 'chercher', 'recommander'],
-                'de': ['produkt', 'artikel', 'suchen', 'empfehlen'],
+                'zh': ['产品', '商品', '找', '搜索', '推荐', '想买', '有什么好', '有没有',
+                       '你们有', '你们的', '有什么', '有哪些', '哪款', '哪款好', '哪一种好',
+                       '有没有适合', '有没有好', '有没有推荐', '活动吗', '防水吗', '保冷吗',
+                       '防滑的吗', '适合送礼', '送女孩子', '生日礼物', '便携椅', '双肩包',
+                       '防水的吗', '保冷吗', '防泼水'],
+                'en': ['product', 'item', 'search for', 'looking for', 'recommend',
+                       'do you have', 'do you sell', 'any', 'is the', 'does the',
+                       'on sale', 'waterproof', 'grip', 'new arrivals', 'good smartwatch',
+                       'good', 'gift', 'camping', 'hiking'],
+                'es': ['producto', 'artículo', 'buscar', 'recomendar', 'tienen',
+                       'recomiéndame', 'algo bueno', 'hay', 'ofrecer'],
+                'fr': ['produit', 'article', 'chercher', 'recommander', 'avez-vous',
+                       'recommandez-moi', 'quelque chose', 'sont-ils', 'solde'],
+                'de': ['produkt', 'artikel', 'suchen', 'empfehlen', 'haben sie',
+                       'empfiehlt mir', 'gutes', 'gibt es', 'angebot'],
             },
 
             IntentType.GENERAL_FAQ: {
@@ -224,6 +234,43 @@ class IntentRouter:
         query_lower = query.lower()
 
         PRIORITY_INTENTS = {IntentType.COMPLAINT, IntentType.HUMAN_TRANSFER}
+
+        lang = language
+
+        shipping_extra = {
+            'zh': ['物流到哪', '到哪了', '什么时候到', '何时到', '快递到哪'],
+            'en': ['when will it arrive', 'where is it now', 'delivery status'],
+            'es': ['cuándo llega', 'dónde está'],
+            'fr': ['quand arrive', 'où est-il'],
+            'de': ['wann kommt', 'wo ist es'],
+        }
+        return_extra = {
+            'zh': ['可以退', '能退', '可不可以退', '可以换', '退吗', '换吗', '七天无理由'],
+            'en': ['can i return', 'can i exchange', 'do you accept returns', 'send back'],
+            'es': ['puedo devolver'],
+            'fr': ['puis-je retourner'],
+            'de': ['kann ich zurückgeben'],
+        }
+        ship_kws = self.intent_keywords[IntentType.SHIPPING_QUERY].get(lang, []) + shipping_extra.get(lang, [])
+        return_kws = self.intent_keywords[IntentType.RETURN_POLICY].get(lang, []) + return_extra.get(lang, [])
+
+        if any(kw in query_lower for kw in return_kws):
+            return {
+                'intent': IntentType.RETURN_POLICY,
+                'confidence': 0.88,
+                'language': language,
+                'should_transfer': False,
+                'reason': None
+            }
+
+        if any(kw in query_lower for kw in ship_kws):
+            return {
+                'intent': IntentType.SHIPPING_QUERY,
+                'confidence': 0.90,
+                'language': language,
+                'should_transfer': False,
+                'reason': None
+            }
 
         order_no_pattern = re.compile(r'(ORD[-–—]?\d{8}[-–—]?\d{3})', re.IGNORECASE)
         if order_no_pattern.search(query) or re.search(r'(?:订单|order)\s*(?:号|no|number)', query_lower):
@@ -402,6 +449,33 @@ if _LANGGRAPH_AVAILABLE:
         以 Graph 形式组织节点，便于扩展和调试。
         """
 
+        _ORDER_CARRIER_WORDS = {
+            "zh": ["物流", "快递", "配送", "运输", "物流到哪", "到哪了",
+                   "什么时候到", "何时到", "快递到哪", "配送状态", "派送", "签收",
+                   "包裹", "运到", "预计送达", "快递单号", "物流状态", "配送需要",
+                   "能到吗", "发顺丰", "发什么快递"],
+            "en": ["shipping", "delivery", "tracking", "logistics", "shipment",
+                   "where is it", "when will it arrive", "delivery status",
+                   "shipping status", "courier", "package", "parcel",
+                   "in transit", "where is my", "right now", "estimated delivery",
+                   "how long does shipping", "do you ship", "track my"],
+            "es": ["envío", "entrega", "seguimiento", "logística", "dónde está",
+                   "cuándo llega", "paquete", "transito", "entrega estimada"],
+            "fr": ["expédition", "livraison", "suivi", "logistique", "où est-il",
+                   "quand arrive", "colis", "en transit", "livraison estimée"],
+            "de": ["versand", "lieferung", "verfolgung", "logistik", "wo ist es",
+                   "wann kommt", "paket", "in transit", "voraussichtliche lieferung"],
+        }
+        _RETURN_REFUND_WORDS = {
+            "zh": ["退货", "退换", "退款", "换货", "售后", "可以退", "能退", "可不可以退",
+                   "可以换", "不满意可以退", "七天无理由", "无理由", "退吗", "换吗", "退不退"],
+            "en": ["return", "exchange", "refund", "after-sales", "can i return", "can i exchange",
+                   "money back", "return policy", "send back", "get a refund", "do you accept returns"],
+            "es": ["devolución", "cambio", "reembolso", "postventa", "puedo devolver", "devolver"],
+            "fr": ["retour", "échange", "remboursement", "après-vente", "puis-je retourner"],
+            "de": ["rückgabe", "tausch", "erstattung", "kundendienst", "kann ich zurückgeben"],
+        }
+
         def __init__(self):
             self._base = IntentRouter()
             self.graph = self._build_graph()
@@ -433,17 +507,38 @@ if _LANGGRAPH_AVAILABLE:
             return {"order_no": m.group(1).upper() if m else None}
 
         def _node_match_keywords(self, state: RouterState) -> dict:
-            if state.get("order_no") or re.search(
+            query_lower = state["query"].lower()
+            lang = state.get("detected_lang", "zh")
+
+            order_no = state.get("order_no")
+            order_ref_match = bool(re.search(
                 r'(?:订单|order)\s*(?:号|no|number)',
-                state["query"].lower()
-            ):
+                query_lower
+            ))
+
+            shipping_kws = self._ORDER_CARRIER_WORDS.get(lang, self._ORDER_CARRIER_WORDS["zh"])
+            shipping_hit = any(kw in query_lower for kw in shipping_kws)
+
+            return_kws = self._RETURN_REFUND_WORDS.get(lang, self._RETURN_REFUND_WORDS["zh"])
+            return_hit = any(kw in query_lower for kw in return_kws)
+
+            if return_hit:
+                return {
+                    "intent": IntentType.RETURN_POLICY,
+                    "confidence": 0.88,
+                }
+
+            if shipping_hit:
+                return {
+                    "intent": IntentType.SHIPPING_QUERY,
+                    "confidence": 0.90,
+                }
+
+            if order_no or order_ref_match:
                 return {
                     "intent": IntentType.ORDER_QUERY,
                     "confidence": 0.85,
                 }
-
-            query_lower = state["query"].lower()
-            lang = state.get("detected_lang", "zh")
 
             best_intent = IntentType.GENERAL_FAQ
             best_confidence = 0.0

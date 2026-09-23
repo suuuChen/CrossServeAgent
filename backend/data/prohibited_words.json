@@ -1,661 +1,138 @@
 {
+  "version": "1.0.0",
+  "updated_at": "2026-09-24",
   "categories": {
-    "political": {
+    "political_sensitive": {
       "name": "政治敏感",
       "severity": "high",
-      "description": "涉及政治敏感话题的词汇"
+      "description": "涉及政治敏感话题、反政府内容"
     },
-    "racial": {
-      "name": "种族歧视",
+    "discrimination": {
+      "name": "歧视内容",
       "severity": "high",
-      "description": "针对特定种族的歧视性言论"
+      "description": "种族/民族/性别/宗教歧视"
     },
-    "religious": {
-      "name": "宗教敏感",
-      "severity": "medium",
-      "description": "涉及宗教禁忌或亵渎性言论"
-    },
-    "violence": {
+    "violence_threat": {
       "name": "暴力威胁",
       "severity": "high",
-      "description": "暴力、威胁、自残相关内容"
+      "description": "暴力、威胁、自残内容"
     },
-    "pornographic": {
+    "pornography": {
       "name": "色情低俗",
       "severity": "high",
-      "description": "色情、低俗、身体暴露相关内容"
+      "description": "色情、低俗、露骨内容"
     },
-    "contraband": {
+    "prohibited_goods": {
       "name": "违禁商品",
-      "severity": "medium",
-      "description": "在跨境电商平台禁止销售的商品"
-    },
-    "scam": {
-      "name": "诈骗相关",
       "severity": "high",
-      "description": "涉及诈骗、刷单、洗钱等违法活动"
+      "description": "毒品、枪支、仿牌、电子烟、处方药、种子、活体动物"
+    },
+    "fraud_scam": {
+      "name": "诈骗",
+      "severity": "medium",
+      "description": "刷单、洗钱、套现、钓鱼"
     },
     "cultural_taboo": {
       "name": "文化禁忌",
       "severity": "medium",
-      "description": "各文化中的禁忌话题或失礼表述"
+      "description": "严重文化禁忌内容"
+    },
+    "contact_info_leak": {
+      "name": "联系方式泄露",
+      "severity": "low",
+      "description": "引导站外沟通、私人联系方式交换"
     }
   },
   "rules": [
     {
-      "category": "political",
+      "category": "political_sensitive",
       "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
+      "note": "政治敏感话题",
       "keywords": [
-        "独裁",
-        "dictator",
-        "fascista",
-        "fasciste",
-        "faschist"
+        "政变", "推翻政府", "恐怖组织", "isis", "基地组织",
+        "政治难民", "军事政变", "极端组织", "武装冲突"
       ]
     },
     {
-      "category": "racial",
+      "category": "discrimination",
       "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
+      "note": "种族/民族歧视",
       "keywords": [
-        "黑鬼",
-        "nigger",
-        "negro",
-        "nègre",
-        "neger"
+        "nigger", "nigga", "chink", "gook", "wetback", "spic",
+        "种族优越", "劣等民族", "low life race", "vermin race",
+        "白人至上", "white supremacy", "纳粹", "nazis"
       ]
     },
     {
-      "category": "racial",
+      "category": "violence_threat",
       "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
+      "note": "暴力威胁/自残",
       "keywords": [
-        "种族灭绝",
-        "genocide",
-        "genocidio",
-        "génocide",
-        "völkermord"
+        "自杀", "想自杀", "kill myself", "suicide", "end my life",
+        "自残", "self harm", "bomb", "炸弹袭击", "shoot people",
+        "枪击案", "人肉炸弹"
       ]
     },
     {
-      "category": "religious",
+      "category": "pornography",
+      "severity": "high",
+      "note": "色情低俗",
+      "keywords": [
+        "porn", "xxx", "成人影片", "av女优", "色情网站", "性交易",
+        "escort service", "adult content", "nude pics", "裸露图片"
+      ]
+    },
+    {
+      "category": "prohibited_goods",
+      "severity": "high",
+      "note": "违禁商品交易",
+      "keywords": [
+        "毒品", "大麻", "cocaine", "heroin", "meth", "weed",
+        "枪支", "gun", "firearm", "弹药", "bullet", "ammo",
+        "仿牌", "fake brand", "counterfeit", "pirat", "盗版",
+        "电子烟", "e-cigarette", "vape", "juul", "nicotine pod",
+        "处方药", "prescription drug", "pharmaceutical", "controlled substance",
+        "种子", "plant seed", "活体动物", "live animal", "活体宠物"
+      ]
+    },
+    {
+      "category": "fraud_scam",
       "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
+      "note": "诈骗行为",
       "keywords": [
-        "古兰经猪",
-        "holy quran pig",
-        "cerdo corán",
-        "porc coran",
-        "quran schwein"
-      ]
-    },
-    {
-      "category": "religious",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "亵渎神明",
-        "blasphemy",
-        "blasfemia",
-        "blasphème",
-        "gotteslästerung"
-      ]
-    },
-    {
-      "category": "violence",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "炸掉",
-        "bomb",
-        "bomba",
-        "bombe",
-        "bombe"
-      ]
-    },
-    {
-      "category": "violence",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "杀了你",
-        "kill you",
-        "te mataré",
-        "je te tuerai",
-        "ich werde dich töten"
-      ]
-    },
-    {
-      "category": "violence",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "恐怖袭击",
-        "terrorist",
-        "terrorista",
-        "terroriste",
-        "terrorist"
-      ]
-    },
-    {
-      "category": "violence",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "自杀炸弹",
-        "suicide bomb",
-        "bomba suicida",
-        "bombe suicide",
-        "selbstmordattentat"
-      ]
-    },
-    {
-      "category": "violence",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "自残",
-        "self-harm",
-        "autolesión",
-        "automutilation",
-        "selbstverletzung"
-      ]
-    },
-    {
-      "category": "pornographic",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "色情",
-        "porn",
-        "porno",
-        "pornographie",
-        "pornographie"
-      ]
-    },
-    {
-      "category": "pornographic",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "裸体",
-        "nude",
-        "desnudo",
-        "nu",
-        "nackt"
-      ]
-    },
-    {
-      "category": "pornographic",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "SM",
-        "bdsm",
-        "bdsm",
-        "bdsm",
-        "bdsm"
-      ]
-    },
-    {
-      "category": "pornographic",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "未成年色情",
-        "child porn",
-        "porno infantil",
-        "pornographie infantile",
-        "kinderpornographie"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "毒品",
-        "drug",
-        "droga",
-        "drogue",
-        "droge"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "枪支",
-        "gun",
-        "arma",
-        "arme",
-        "waffe"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "弹药",
-        "ammo",
-        "munición",
-        "munitions",
-        "munition"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "仿牌",
-        "counterfeit",
-        "falsificado",
-        "contrefaçon",
-        "fälschung"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "电子烟",
-        "e-cigarette",
-        "cigarrillo electrónico",
-        "e-cigarette",
-        "e-zigarette"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "电子烟液",
-        "vape liquid",
-        "líquido vape",
-        "liquide vapoteur",
-        "dampf liquid"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "处方药",
-        "prescription drug",
-        "medicamento receta",
-        "médicament ordonnance",
-        "rezeptpflichtiges medikament"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "种子",
-        "seeds",
-        "semillas",
-        "graines",
-        "samen"
-      ]
-    },
-    {
-      "category": "contraband",
-      "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "活体动物",
-        "live animal",
-        "animal vivo",
-        "animal vivant",
-        "lebendes tier"
-      ]
-    },
-    {
-      "category": "scam",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "刷单",
-        "fake order",
-        "pedido falso",
-        "commande fake",
-        "falsche bestellung"
-      ]
-    },
-    {
-      "category": "scam",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "洗钱",
-        "money laundering",
-        "lavado de dinero",
-        "blanchiment d'argent",
-        "geldwäsche"
-      ]
-    },
-    {
-      "category": "scam",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "套现",
-        "cash out",
-        "retirar efectivo",
-        "retirer l'argent",
-        "abheben"
-      ]
-    },
-    {
-      "category": "scam",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "诈骗",
-        "scam",
-        "estafa",
-        "arnaque",
-        "betrug"
-      ]
-    },
-    {
-      "category": "scam",
-      "severity": "high",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "钓鱼",
-        "phishing",
-        "suplantación",
-        "hameçonnage",
-        "phishing"
+        "刷单", "fake order", "刷好评", "fake review", "刷单刷评",
+        "洗钱", "money launder", "套现", "cash out fraud",
+        "钓鱼", "phishing", "钓鱼网站", "仿冒网站", "counterfeit site",
+        "信用诈骗", "credit card fraud", "盗刷"
       ]
     },
     {
       "category": "cultural_taboo",
       "severity": "medium",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
+      "note": "宗教亵渎",
       "keywords": [
-        "猪",
-        "pig",
-        "cerdo",
-        "porc",
-        "schwein"
-      ],
-      "note": "阿拉伯文化对猪相关词汇较敏感"
+        "亵渎", "blasphemy", "侮辱宗教", "宗教嘲笑", "mock religion",
+        "圣战", "holy war", "jihad", "异教徒"
+      ]
     },
     {
-      "category": "cultural_taboo",
-      "severity": "medium",
-      "languages": [
-        "en"
-      ],
-      "keywords": [
-        "redneck",
-        "hillbilly",
-        "white trash"
-      ],
-      "note": "英语乡村阶层歧视"
-    },
-    {
-      "category": "cultural_taboo",
-      "severity": "medium",
-      "languages": [
-        "ja"
-      ],
-      "keywords": [
-        "死ね",
-        "きえろ"
-      ],
-      "note": "日语极粗鄙表达"
-    },
-    {
-      "category": "cultural_taboo",
+      "category": "contact_info_leak",
       "severity": "low",
-      "languages": [
-        "en"
-      ],
+      "note": "引导站外沟通",
       "keywords": [
-        "blacklist",
-        "whitelist"
-      ],
-      "note": "科技领域包容性替换建议: blocklist/allowlist"
+        "加微信", "加qq", "加line", "私人联系方式", "contact me on wechat",
+        "my whatsapp", "instagram dm", "telegram group", "站外交易"
+      ]
     }
   ],
   "soft_keywords": [
     {
-      "category": "pornographic",
+      "category": "sensitive_topic",
       "severity": "low",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
+      "note": "弱敏感词，仅记录",
       "keywords": [
-        "性",
-        "sex",
-        "sexo",
-        "sexe",
-        "sex"
-      ]
-    },
-    {
-      "category": "violence",
-      "severity": "low",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "打",
-        "beat",
-        "golpear",
-        "battre",
-        "schlagen"
-      ]
-    },
-    {
-      "category": "violence",
-      "severity": "low",
-      "languages": [
-        "zh",
-        "en",
-        "es",
-        "fr",
-        "de"
-      ],
-      "keywords": [
-        "死",
-        "die",
-        "morir",
-        "mourir",
-        "sterben"
+        "价格太便宜了", "how come so cheap", "这个价格靠谱吗",
+        "too good to be true", "价格异常"
       ]
     }
   ]
