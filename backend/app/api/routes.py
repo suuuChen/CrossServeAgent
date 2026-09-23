@@ -655,7 +655,7 @@ async def get_agent_efficiency(
 # ==================== 数据导出接口====================
 @api_router.get("/export/audit-logs", tags=["数据导出"])
 async def export_audit_logs(
-    format: str = Query("csv", regex="^(csv|json)$", description="导出格式: csv/json"),
+    format: str = Query("csv", pattern="^(csv|json)$", description="导出格式: csv/json"),
     event_type: Optional[str] = Query(None, description="按事件类型过滤"),
     hours: Optional[int] = Query(None, ge=1, le=720, description="最近N小时"),
     limit: int = Query(10000, ge=1, le=50000, description="最大导出条数"),

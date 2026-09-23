@@ -24,7 +24,7 @@ class Colors:
     RESET = '\033[0m'
 
 
-def print_header(title, icon="🚀"):
+def print_header(title, icon=""):
     """打印醒目的分组标题"""
     width = 70
     print(f"\n{Colors.CYAN}{'═' * width}{Colors.RESET}")
@@ -32,7 +32,7 @@ def print_header(title, icon="🚀"):
     print(f"{Colors.CYAN}{'═' * width}{Colors.RESET}\n")
 
 
-def print_section(title, emoji="📋"):
+def print_section(title, emoji=""):
     """打印子模块标题"""
     print(f"\n{Colors.BOLD}{Colors.YELLOW}▸ {emoji} {title}{Colors.RESET}")
     print(f"{Colors.DIM}{'─' * 50}{Colors.RESET}")
@@ -60,57 +60,57 @@ def test(name, method, path, data=None, check=None, timeout=120, expect_404=Fals
             d = {"_raw_bytes": len(raw), "_content_type": resp.headers.get("Content-Type", "")}
         
         if expect_404:
-            print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+            print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
             print(f"       Expected 404 but got 200")
             FAIL += 1
             return d
         
         if expect_429:
-            print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+            print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
             print(f"       Expected 429 but got 200")
             FAIL += 1
             return d
         
         if "_raw_bytes" in d:
             if d["_raw_bytes"] > 0:
-                print(f"{Colors.GREEN}[✓] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+                print(f"{Colors.GREEN}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
                 PASS += 1
             else:
-                print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+                print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
                 print(f"       Empty non-JSON response")
                 FAIL += 1
             return d
         
         if check and not check(d):
-            print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
-            print(f"       Check failed → {json.dumps(d, ensure_ascii=False)[:150]}")
+            print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+            print(f"       Check failed  {json.dumps(d, ensure_ascii=False)[:150]}")
             FAIL += 1
         else:
-            print(f"{Colors.GREEN}[✓] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+            print(f"{Colors.GREEN}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
             PASS += 1
         
         return d
         
     except urllib.error.HTTPError as e:
         if expect_404 and e.code == 404:
-            print(f"{Colors.GREEN}[✓] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+            print(f"{Colors.GREEN}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
             PASS += 1
             return None
         
         if expect_429 and e.code == 429:
-            print(f"{Colors.GREEN}[✓] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+            print(f"{Colors.GREEN}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
             PASS += 1
             return None
         
         body = e.read().decode()[:150]
-        print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
-        print(f"       HTTP {e.code} → {body}")
+        print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+        print(f"       HTTP {e.code}  {body}")
         FAIL += 1
         return None
         
     except Exception as e:
-        print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
-        print(f"       Error → {str(e)[:100]}")
+        print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: {name}{Colors.RESET}")
+        print(f"       Error  {str(e)[:100]}")
         FAIL += 1
         return None
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
          {"order_no": "ORD-20240101-001"},
          check=lambda d: d.get("order_no") == "ORD-20240101-001" and d.get("items"))
     
-    test("Query non-existing order → 404", "POST", "/api/v1/orders/query",
+    test("Query non-existing order  404", "POST", "/api/v1/orders/query",
          {"order_no": "ORD-NOT-EXIST"}, expect_404=True)
     
     print(f"\n{Colors.BOLD}Chat Intents (Chinese){Colors.RESET}")
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     
     test("Delete session", "DELETE", f"/api/v1/sessions/{sid}")
     
-    test("Deleted session → 404", "GET", f"/api/v1/sessions/{sid}", expect_404=True)
+    test("Deleted session  404", "GET", f"/api/v1/sessions/{sid}", expect_404=True)
 
     # ==================== Week 2 ====================
     print_section("Week 2: Advanced Features")
@@ -198,7 +198,7 @@ if __name__ == "__main__":
          {"message": "Empfehle mir gute Kopfhörer", "language": "de"},
          check=lambda d: d["language"] == "de")
     
-    test("Auto-detect language (EN→ZH)", "POST", "/api/v1/chat",
+    test("Auto-detect language (ENZH)", "POST", "/api/v1/chat",
          {"message": "I want to return this item please", "language": "zh"},
          check=lambda d: d["language"] in ["en", "zh"])
     
@@ -218,22 +218,22 @@ if __name__ == "__main__":
          {"text": "This website sells drugs and guns", "language": "en"},
          check=lambda d: d.get("success") and d["result"]["blocked"])
     
-    test("Chat with prohibited content → blocked", "POST", "/api/v1/chat",
+    test("Chat with prohibited content  blocked", "POST", "/api/v1/chat",
          {"message": "我想买点毒品", "language": "zh"},
          check=lambda d: d.get("compliance_blocked") == True)
     
-    test("Chat with safe content → allowed", "POST", "/api/v1/chat",
+    test("Chat with safe content  allowed", "POST", "/api/v1/chat",
          {"message": "我想咨询退款政策", "language": "zh"},
          check=lambda d: d.get("compliance_blocked") == False)
     
     print(f"\n{Colors.BOLD}Human Transfer Enhancement{Colors.RESET}")
-    c1 = test("Complaint → auto transfer trigger", "POST", "/api/v1/chat",
+    c1 = test("Complaint  auto transfer trigger", "POST", "/api/v1/chat",
               {"message": "你们的服务太差了，快递慢得要死，我要投诉！", "language": "zh"},
               check=lambda d: d["should_transfer"] == True)
     c1_sid = c1["session_id"] if c1 else None
     
     if c1_sid:
-        test("Session status → pending_human", "GET", f"/api/v1/sessions/{c1_sid}",
+        test("Session status  pending_human", "GET", f"/api/v1/sessions/{c1_sid}",
              check=lambda d: d["session"].get("status") == "pending_human")
     
     test("List pending-human sessions", "GET", "/api/v1/sessions/pending-human",
@@ -245,7 +245,7 @@ if __name__ == "__main__":
              check=lambda d: d.get("success") and d.get("new_status") == "human_assisted")
     
     if c1_sid:
-        test("Session after takeover → human_assisted", "GET", f"/api/v1/sessions/{c1_sid}",
+        test("Session after takeover  human_assisted", "GET", f"/api/v1/sessions/{c1_sid}",
              check=lambda d: d["session"].get("status") == "human_assisted")
     
     print(f"\n{Colors.BOLD}Audit Logging{Colors.RESET}")
@@ -262,7 +262,7 @@ if __name__ == "__main__":
          check=lambda d: d.get("success"))
 
     # ==================== Week 3 ====================
-    print_section("Week 3: Operations Agent", "📊")
+    print_section("Week 3: Operations Agent", "")
     
     listing_product = {
         "name": "Air Max Pro Running Shoes",
@@ -376,7 +376,7 @@ if __name__ == "__main__":
          check=lambda d: d["success"] and len(d["result"]["variants"]) >= 2)
 
     # ==================== Week 4 ====================
-    print_section("Week 4: System Integration & Deployment", "🚢")
+    print_section("Week 4: System Integration & Deployment", "")
 
     print(f"\n{Colors.BOLD}Operations Dashboard{Colors.RESET}")
     test("Dashboard all-time summary", "GET", "/api/v1/reports/dashboard",
@@ -459,7 +459,7 @@ if __name__ == "__main__":
             with results_lock:
                 results["error"] += 1
 
-    print(f"  {Colors.DIM}→ Chat limit = {CHAT_LIMIT}/60s, firing {BURST} concurrent requests...{Colors.RESET}")
+    print(f"  {Colors.DIM} Chat limit = {CHAT_LIMIT}/60s, firing {BURST} concurrent requests...{Colors.RESET}")
     threads = [threading.Thread(target=_burst_worker, args=(i,)) for i in range(BURST)]
     t0 = time.time()
     for t in threads:
@@ -471,17 +471,17 @@ if __name__ == "__main__":
     TEST_NUM += 1
     TOTAL += 1
     if results["limited"] > 0:
-        print(f"{Colors.GREEN}[✓] Test #{TEST_NUM:02d}: Rate limit triggered → HTTP 429 ({results['limited']}/{BURST} limited in {elapsed:.1f}s){Colors.RESET}")
+        print(f"{Colors.GREEN}[] Test #{TEST_NUM:02d}: Rate limit triggered  HTTP 429 ({results['limited']}/{BURST} limited in {elapsed:.1f}s){Colors.RESET}")
         PASS += 1
     else:
-        print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: Rate limit NOT triggered (limit={CHAT_LIMIT}, ok={results['ok']}, err={results['error']}){Colors.RESET}")
+        print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: Rate limit NOT triggered (limit={CHAT_LIMIT}, ok={results['ok']}, err={results['error']}){Colors.RESET}")
         FAIL += 1
 
     try:
         reset_req = urllib.request.Request(BASE + "/api/v1/monitor/rate-limiter/reset", method='POST')
         reset_resp = json.loads(urllib.request.urlopen(reset_req, timeout=5).read())
         if reset_resp.get("success"):
-            print(f"  {Colors.DIM}→ Rate limiter reset: cleared {reset_resp['cleared_entries']} entries{Colors.RESET}")
+            print(f"  {Colors.DIM} Rate limiter reset: cleared {reset_resp['cleared_entries']} entries{Colors.RESET}")
     except Exception:
         pass
 
@@ -517,7 +517,7 @@ if __name__ == "__main__":
          check=lambda d: d["status"] == "running")
 
     # ==================== Edge Cases ====================
-    print_section("Edge Cases & Robustness", "⚡")
+    print_section("Edge Cases & Robustness", "")
     
     print(f"\n{Colors.BOLD}Input Validation{Colors.RESET}")
     try:
@@ -526,7 +526,7 @@ if __name__ == "__main__":
                                      method='POST')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=30)
-        print(f"{Colors.RED}[✗] Empty message validation failed (expected 422){Colors.RESET}")
+        print(f"{Colors.RED}[] Empty message validation failed (expected 422){Colors.RESET}")
         FAIL += 1
         TOTAL += 1
         TEST_NUM += 1
@@ -534,13 +534,13 @@ if __name__ == "__main__":
         TEST_NUM += 1
         TOTAL += 1
         if e.code == 422:
-            print(f"{Colors.GREEN}[✓] Test #{TEST_NUM:02d}: Empty message → 422 validation error{Colors.RESET}")
+            print(f"{Colors.GREEN}[] Test #{TEST_NUM:02d}: Empty message  422 validation error{Colors.RESET}")
             PASS += 1
         else:
-            print(f"{Colors.RED}[✗] Test #{TEST_NUM:02d}: Empty message → expected 422 but got {e.code}{Colors.RESET}")
+            print(f"{Colors.RED}[] Test #{TEST_NUM:02d}: Empty message  expected 422 but got {e.code}{Colors.RESET}")
             FAIL += 1
     
-    test("Non-existent session → 404", "GET", "/api/v1/sessions/fake-session-id", expect_404=True)
+    test("Non-existent session  404", "GET", "/api/v1/sessions/fake-session-id", expect_404=True)
     
     print(f"\n{Colors.BOLD}RAG System Endpoints{Colors.RESET}")
     test("Product recommendations", "GET", "/api/v1/products/recommendations?limit=3")

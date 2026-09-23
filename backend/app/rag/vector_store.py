@@ -209,7 +209,7 @@ class VectorStore:
             product = result.scalar_one_or_none()  # 获取单条记录（或None）
             
             if product:
-                return product.to_dict()  # ORM对象→字典
+                return product.to_dict()  # ORM对象字典
             return None
             
         except Exception as e:

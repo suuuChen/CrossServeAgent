@@ -60,10 +60,10 @@ async def generate_orders(count: int = 1000):
     products = await get_products()
 
     if not products:
-        print("❌ 没有找到商品数据，请先运行 init_test_data.py")
+        print(" 没有找到商品数据，请先运行 init_test_data.py")
         return
 
-    print(f"\n📦 开始生成 {count} 个订单 (使用 {len(products)} 个商品)...")
+    print(f"\n 开始生成 {count} 个订单 (使用 {len(products)} 个商品)...")
 
     created = 0
     batch_size = 100
@@ -131,19 +131,19 @@ async def generate_orders(count: int = 1000):
                     created += 1
 
                 except Exception as e:
-                    print(f"  ⚠️ 订单 {i+1} 生成失败: {e}")
+                    print(f"  ️ 订单 {i+1} 生成失败: {e}")
                     continue
 
             await session.commit()
 
-        print(f"  ✅ 批次完成: {batch_end}/{count}")
+        print(f"   批次完成: {batch_end}/{count}")
 
-    print(f"\n✨ 成功生成 {created} 个订单！")
-    print(f"\n📊 数据概览:")
+    print(f"\n 成功生成 {created} 个订单！")
+    print(f"\n 数据概览:")
     print(f"   订单总数: {created}")
     print(f"   商品复用: {len(products)} 个")
     print(f"   状态分布: {dict(zip(STATUSES, STATUS_WEIGHTS))}")
-    print(f"\n🎯 现在可以使用这些订单测试:")
+    print(f"\n 现在可以使用这些订单测试:")
     print(f"   - POST /api/v1/chat (询单场景)")
     print(f"   - GET /api/v1/orders/{{order_no}} (订单查询)")
 
@@ -154,7 +154,7 @@ def main():
     args = parser.parse_args()
 
     print(f"\n{'='*60}")
-    print(f"🚀 数据准备: 生成 {args.count} 个模拟订单")
+    print(f" 数据准备: 生成 {args.count} 个模拟订单")
     print(f"{'='*60}")
 
     asyncio.run(generate_orders(args.count))

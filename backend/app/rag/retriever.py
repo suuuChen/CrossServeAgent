@@ -1,6 +1,6 @@
 """
 RAG检索增强生成核心模块
-实现完整的检索→上下文构建→LLM生成的Pipeline
+实现完整的检索上下文构建LLM生成的Pipeline
 """
 
 import time
@@ -17,7 +17,7 @@ class RAGRetriever:
     RAG检索器（核心类）
     
     Pipeline流程：
-    用户查询 → 意图识别 → 向量检索 → 上下文构建 → LLM生成回复
+    用户查询  意图识别  向量检索  上下文构建  LLM生成回复
     
     特点：
     - 单次LLM调用（保证响应时间<6s）
@@ -37,14 +37,14 @@ class RAGRetriever:
 
         # 根据配置选择LLM客户端
         if settings.use_local_llm:
-            print(f"🔧 使用本地LLM: {settings.local_llm_model} @ {settings.local_llm_url}")
+            print(f"使用本地LLM: {settings.local_llm_model} @ {settings.local_llm_url}")
             self.llm_client = OpenAI(
                 base_url=settings.local_llm_url,
                 api_key="ollama"  # Ollama不需要真实API Key
             )
             self.model_name = settings.local_llm_model
         else:
-            print(f"☁️ 使用OpenAI API: {settings.openai_model}")
+            print(f"使用OpenAI API: {settings.openai_model}")
             self.llm_client = OpenAI(api_key=settings.openai_api_key)
             self.model_name = settings.openai_model
 
@@ -398,11 +398,11 @@ class RAGRetriever:
         """
         # 快速模式：不调用LLM，直接返回基于规则的回复
         if getattr(settings, 'use_fast_mode', False):
-            print("⚡ 使用快速模式（跳过LLM调用）")
+            print("使用快速模式（跳过LLM调用）")
             return await self._fast_mode_response(prompt, language)
 
         try:
-            print(f"🤖 调用LLM生成回复: {self.model_name}")
+            print(f"调用LLM生成回复: {self.model_name}")
             response = self.llm_client.chat.completions.create(
                 model=self.model_name,  # 使用配置的模型（本地或云端）
                 messages=[
@@ -414,13 +414,12 @@ class RAGRetriever:
             )
 
             result = response.choices[0].message.content  # 提取回复文本
-            print(f"✅ LLM回复成功: {len(result)}字符")
+            print(f"LLM回复成功: {len(result)}字符")
             return result
 
         except Exception as e:
-            print(f"❌ LLM调用失败: {e}")
-            # LLM失败时自动降级到快速模式
-            print("⚠️ 自动降级到快速模式")
+            print(f"LLM调用失败: {e}")
+            print("自动降级到快速模式")
             return await self._fast_mode_response(prompt, language)
 
     async def _fast_mode_response(self, prompt: str, language: str) -> str:
@@ -441,19 +440,22 @@ class RAGRetriever:
         """
         import re
 
-        # 从prompt中提取用户问题（最后一行通常是问题）
         lines = prompt.strip().split('\n')
         user_question = lines[-1] if lines else ""
 
-        # 使用模拟数据服务搜索相关FAQ
-        faqs = MockDataService.search_faqs(user_question, language, top_k=2)
+        try:
+            faqs = await self.vector_store.search_faq(
+                query=user_question,
+                top_k=2,
+                language=language
+            )
+        except Exception:
+            faqs = []
 
         if faqs:
-            # 找到匹配的FAQ，直接返回最佳答案
             best_faq = faqs[0]
-            print(f"📚 FAQ命中: {best_faq['question'][:30]}... (相关性: {best_faq['relevance_score']:.2f})")
+            print(f"FAQ命中: {best_faq.get('question', '')[:30]}...")
 
-            # 根据语言构建友好回复
             greetings = {
                 'zh': '您好！',
                 'en': 'Hello! ',
@@ -463,56 +465,57 @@ class RAGRetriever:
             }
             greeting = greetings.get(language, '您好！')
 
-            return f"{greeting}{best_faq['answer']}"
+            answer = best_faq.get('answer', '') or best_faq.get('content', '')
+            return f"{greeting}{answer}"
 
         # 如果没有找到FAQ，使用通用回复
-        print("⚠️ 未找到匹配FAQ，使用通用回复")
+        print("未找到匹配FAQ，使用通用回复")
 
         default_responses = {
             'zh': """您好！感谢您的咨询。
 
-关于您的问题，我建议您：
-1. 登录账户查看详细订单信息
-2. 或提供订单号给我，我可以帮您查询
-3. 也可以拨打客服热线：400-123-4567（9:00-22:00）
-
-还有什么我可以帮助您的吗？""",
+            关于您的问题，我建议您：
+            1. 登录账户查看详细订单信息
+            2. 或提供订单号给我，我可以帮您查询
+            3. 也可以拨打客服热线：400-123-4567（9:00-22:00）
+            
+            还有什么我可以帮助您的吗？""",
 
             'en': """Hello! Thank you for your inquiry.
 
-Regarding your question, I suggest you:
-1. Log in to your account to view detailed order information
-2. Or provide your order number and I can help you check
-3. You can also call our hotline: 400-123-4567 (9AM-10PM)
-
-Is there anything else I can help you with?""",
+            Regarding your question, I suggest you:
+            1. Log in to your account to view detailed order information
+            2. Or provide your order number and I can help you check
+            3. You can also call our hotline: 400-123-4567 (9AM-10PM)
+            
+            Is there anything else I can help you with?""",
 
             'es': """¡Hola! Gracias por su consulta.
 
-Respecto a su pregunta, le sugiero:
-1. Inicie sesión en su cuenta para ver información detallada del pedido
-2. O proporcione su número de pedido y puedo ayudarle a verificarlo
-3. También puede llamar a nuestra línea directa: 400-123-4567 (9AM-10PM)
-
-¿Hay algo más en lo que pueda ayudarle?""",
+            Respecto a su pregunta, le sugiero:
+            1. Inicie sesión en su cuenta para ver información detallada del pedido
+            2. O proporcione su número de pedido y puedo ayudarle a verificarlo
+            3. También puede llamar a nuestra línea directa: 400-123-4567 (9AM-10PM)
+            
+            ¿Hay algo más en lo que pueda ayudarle?""",
 
             'fr': """Bonjour ! Merci pour votre demande.
 
-Concernant votre question, je vous suggère :
-1. Connectez-vous à votre compte pour voir les informations détaillées de la commande
-2. Ou fournissez votre numéro de commande et je peux vous aider à vérifier
-3. Vous pouvez également appeler notre ligne directe : 400-123-4567 (9h-22h)
-
-Y a-t-il autre chose que je puisse faire pour vous ?""",
+            Concernant votre question, je vous suggère :
+            1. Connectez-vous à votre compte pour voir les informations détaillées de la commande
+            2. Ou fournissez votre numéro de commande et je peux vous aider à vérifier
+            3. Vous pouvez également appeler notre ligne directe : 400-123-4567 (9h-22h)
+            
+            Y a-t-il autre chose que je puisse faire pour vous ?""",
 
             'de': """Hallo! Danke für Ihre Anfrage.
 
-Bezüglich Ihrer Frage schlage ich vor:
-1. Melden Sie sich an, um detaillierte Bestellungsinformationen anzuzeigen
-2. Oder geben Sie Ihre Bestellnummer an und ich kann Ihnen helfen zu überprüfen
-3. Sie können auch unsere Hotline anrufen: 400-123-4567 (9-22 Uhr)
-
-Kann ich Ihnen sonst noch behilflich sein?"""
+            Bezüglich Ihrer Frage schlage ich vor:
+            1. Melden Sie sich an, um detaillierte Bestellungsinformationen anzuzeigen
+            2. Oder geben Sie Ihre Bestellnummer an und ich kann Ihnen helfen zu überprüfen
+            3. Sie können auch unsere Hotline anrufen: 400-123-4567 (9-22 Uhr)
+            
+            Kann ich Ihnen sonst noch behilflich sein?"""
         }
 
         return default_responses.get(language, default_responses['zh'])

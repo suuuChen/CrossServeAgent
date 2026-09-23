@@ -27,7 +27,7 @@ async def init_database():
     """Initialize database tables"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✅ Database tables created successfully")
+    print(" Database tables created successfully")
 
 
 async def import_products():
@@ -39,7 +39,7 @@ async def import_products():
         data = json.load(f)
     
     products = data['products']
-    print(f"📦 Loading {len(products)} products...")
+    print(f" Loading {len(products)} products...")
     
     async with AsyncSessionLocal() as session:
         imported_count = 0
@@ -60,10 +60,10 @@ async def import_products():
                 imported_count += 1
                 
             except Exception as e:
-                print(f"❌ Error importing product {prod.get('sku')}: {e}")
+                print(f" Error importing product {prod.get('sku')}: {e}")
         
         await session.commit()
-        print(f"✅ Successfully imported {imported_count} products")
+        print(f" Successfully imported {imported_count} products")
 
 
 async def create_sample_orders():
@@ -116,7 +116,7 @@ async def create_sample_orders():
         }
     ]
     
-    print(f"📋 Creating {len(sample_orders)} sample orders...")
+    print(f" Creating {len(sample_orders)} sample orders...")
     
     async with AsyncSessionLocal() as session:
         created_count = 0
@@ -160,10 +160,10 @@ async def create_sample_orders():
                 created_count += 1
                 
             except Exception as e:
-                print(f"❌ Error creating order {order_data.get('order_no')}: {e}")
+                print(f" Error creating order {order_data.get('order_no')}: {e}")
         
         await session.commit()
-        print(f"✅ Successfully created {created_count} sample orders")
+        print(f" Successfully created {created_count} sample orders")
 
 
 async def create_faq_knowledge():
@@ -178,7 +178,7 @@ async def create_faq_knowledge():
         },
         {
             "question": "退货政策是什么？",
-            "answer": "我们提供7天无理由退换货服务。商品需保持原包装未拆封、未使用。质量问题可延长至30天退换。退货流程：申请退货→客服审核→寄回商品→退款处理（3-5个工作日到账）。运费由我们承担（质量问题）或买家承担（非质量问题）。",
+            "answer": "我们提供7天无理由退换货服务。商品需保持原包装未拆封、未使用。质量问题可延长至30天退换。退货流程：申请退货客服审核寄回商品退款处理（3-5个工作日到账）。运费由我们承担（质量问题）或买家承担（非质量问题）。",
             "category": "售后政策",
             "language": "zh"
         },
@@ -226,7 +226,7 @@ async def create_faq_knowledge():
         },
         {
             "question": "What is the return policy?",
-            "answer": "We offer a 7-day no-reason return policy. Items must be unused and in original packaging. Quality issues can be returned within 30 days. Return process: Request return → CS approval → Ship item → Refund (3-5 business days). Shipping is free for quality issues; otherwise buyer pays.",
+            "answer": "We offer a 7-day no-reason return policy. Items must be unused and in original packaging. Quality issues can be returned within 30 days. Return process: Request return  CS approval  Ship item  Refund (3-5 business days). Shipping is free for quality issues; otherwise buyer pays.",
             "category": "returns",
             "language": "en"
         },
@@ -250,7 +250,7 @@ async def create_faq_knowledge():
         },
         {
             "question": "Cuál es la política de devolución?",
-            "answer": "Ofrecemos devolución sin motivo de 7 días. Los artículos deben estar sin usar y en su embalaje original. Problemas de calidad: 30 días de devolución gratuita. Proceso: Solicitar devolución → Aprobación → Enviar → Reembolso (3-5 días hábiles). Envío gratis para problemas de calidad.",
+            "answer": "Ofrecemos devolución sin motivo de 7 días. Los artículos deben estar sin usar y en su embalaje original. Problemas de calidad: 30 días de devolución gratuita. Proceso: Solicitar devolución  Aprobación  Enviar  Reembolso (3-5 días hábiles). Envío gratis para problemas de calidad.",
             "category": "devoluciones",
             "language": "es"
         },
@@ -274,13 +274,13 @@ async def create_faq_knowledge():
         },
         {
             "question": "Was ist die Rückgaberichtlinie?",
-            "answer": "7 Tage kostenlose Rückgabe ohne Angabe von Gründen. Artikel müssen unbenutzt in Originalverpackung sein. Qualitätsmängel: 30 Tage kostenlose Rückgabe. Prozess: Rückgabe beantragen → Freigabe → Versand → Rückerstattung (3-5 Werktage). Kostenlos bei Qualitätsmängeln.",
+            "answer": "7 Tage kostenlose Rückgabe ohne Angabe von Gründen. Artikel müssen unbenutzt in Originalverpackung sein. Qualitätsmängel: 30 Tage kostenlose Rückgabe. Prozess: Rückgabe beantragen  Freigabe  Versand  Rückerstattung (3-5 Werktage). Kostenlos bei Qualitätsmängeln.",
             "category": "rückgabe",
             "language": "de"
         }
     ]
     
-    print(f"📚 Creating {len(faqs)} FAQ entries...")
+    print(f" Creating {len(faqs)} FAQ entries...")
     
     async with AsyncSessionLocal() as session:
         created_count = 0
@@ -304,16 +304,16 @@ async def create_faq_knowledge():
                 created_count += 1
                 
             except Exception as e:
-                print(f"❌ Error creating FAQ: {e}")
+                print(f" Error creating FAQ: {e}")
         
         await session.commit()
-        print(f"✅ Successfully created {created_count} FAQ entries")
+        print(f" Successfully created {created_count} FAQ entries")
 
 
 async def main():
     """Main function to initialize all test data"""
     print("\n" + "="*60)
-    print("🚀 Initializing Test Data for Week 1 Development")
+    print(" Initializing Test Data for Week 1 Development")
     print("="*60 + "\n")
     
     try:
@@ -330,22 +330,22 @@ async def main():
         await create_faq_knowledge()
         
         print("\n" + "="*60)
-        print("✨ All test data initialized successfully!")
+        print(" All test data initialized successfully!")
         print("="*60 + "\n")
         
-        print("📊 Summary:")
+        print(" Summary:")
         print("   - 50 Products imported")
         print("   - 3 Sample orders created")
         print("   - 8 FAQ entries added")
         print("   - Database tables ready")
-        print("\n🎯 Next steps:")
+        print("\n Next steps:")
         print("   1. Start the application: docker-compose up -d")
         print("   2. Index products to vector DB: POST /api/v1/rag/index-products")
         print("   3. Test chat endpoint: POST /api/v1/chat")
         print("   4. Access API docs: http://localhost:8000/docs\n")
         
     except Exception as e:
-        print(f"\n❌ Error during initialization: {e}")
+        print(f"\n Error during initialization: {e}")
         raise
 
 

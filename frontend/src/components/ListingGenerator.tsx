@@ -9,11 +9,11 @@ const PLATFORMS = [
 ];
 
 const LANGUAGES = [
-  { code: 'en', label: '英语 🇬🇧' },
-  { code: 'es', label: '西班牙语 🇪🇸' },
-  { code: 'fr', label: '法语 🇫🇷' },
-  { code: 'de', label: '德语 🇩🇪' },
-  { code: 'zh', label: '中文 🇨🇳' },
+  { code: 'en', label: '英语' },
+  { code: 'es', label: '西班牙语' },
+  { code: 'fr', label: '法语' },
+  { code: 'de', label: '德语' },
+  { code: 'zh', label: '中文' },
 ];
 
 export default function ListingGenerator() {
@@ -143,7 +143,7 @@ export default function ListingGenerator() {
 
             <div className="border-t border-slate-100 pt-4">
               <label className="text-xs text-slate-500 block mb-2">
-                🌍 目标语言: <span className="text-purple-600 font-semibold">{LANGUAGES.find(l => l.code === targetLanguage)?.label}</span>
+                目标语言: <span className="text-purple-600 font-semibold">{LANGUAGES.find(l => l.code === targetLanguage)?.label}</span>
               </label>
               <div className="grid grid-cols-3 gap-2">
                 {LANGUAGES.map(lang => (
@@ -181,7 +181,7 @@ export default function ListingGenerator() {
               disabled={loading || !product.name}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md"
             >
-              {loading ? '⏳ 生成中...' : '✨ 生成多语言Listing'}
+              {loading ? '生成中...' : '生成多语言Listing'}
             </button>
           </div>
         </div>
@@ -207,7 +207,7 @@ export default function ListingGenerator() {
                     {result.variants.map((variant: any, idx: number) => (
                       <div key={idx} className="border border-slate-200 rounded-lg p-4">
                         <div className="text-xs text-slate-500 mb-3 font-medium">
-                          📋 版本 {idx + 1}
+                          版本 {idx + 1}
                         </div>
                         
                         <div className="space-y-4">
@@ -267,7 +267,7 @@ export default function ListingGenerator() {
           ) : (
             <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
               <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-4xl mb-4">
-                📝
+                Listing
               </div>
               <h3 className="text-lg font-semibold text-slate-700 mb-2">多语言商品Listing生成器</h3>
               <p className="text-sm text-slate-500 mb-4">

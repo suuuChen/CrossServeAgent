@@ -29,7 +29,7 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    # 关联关系：订单 → 订单项（一对多）
+    # 关联关系：订单  订单项（一对多）
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
     def to_dict(self):
@@ -66,7 +66,7 @@ class OrderItem(Base):
     quantity = Column(Integer)  # 数量
     unit_price = Column(Numeric(10, 2))  # 单价
 
-    # 关联关系：订单项 → 订单（多对一）
+    # 关联关系：订单项  订单（多对一）
     order = relationship("Order", back_populates="items")
 
     def to_dict(self):

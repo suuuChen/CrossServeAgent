@@ -1,368 +1,21 @@
 """
 多语言客服Agent引擎
-整合: 意图路由 + 语言检测 + 客服编排 + 转人工会话管理
+整合: 客服编排 + 转人工会话管理 + 订单查询
 """
 
-from typing import Tuple, Optional
-from enum import Enum
-
-import re
-
-
-UNICODE_RANGES = {
-    "zh": [(0x4E00, 0x9FFF), (0x3400, 0x4DBF), (0x20000, 0x2A6DF)],
-}
-
-LANG_SPECIFIC_CHARS = {
-    "es": ["¿", "¡", "ñ", "Ñ", "á", "é", "í", "ó", "ú", "Á", "É", "Í", "Ó", "Ú", "ü", "Ü"],
-    "fr": ["ç", "Ç", "é", "è", "ê", "ë", "à", "â", "î", "ô", "û", "ÿ", "œ", "Œ", "æ", "Æ"],
-    "de": ["ä", "Ä", "ö", "Ö", "ü", "Ü", "ß"],
-    "en": [],
-}
-
-LANG_INDICATORS = {
-    "zh": ["的", "了", "是", "我", "你", "在", "和", "吗", "吧", "就", "那", "也", "要", "请", "您"],
-    "en": ["the", "is", "are", "was", "were", "this", "that", "and", "you", "i", "we", "they", "please", "hello", "hi", "where", "what", "how", "when", "who"],
-    "es": ["el", "la", "los", "las", "es", "son", "esta", "este", "por", "para", "hola", "gracias", "por favor", "pedido", "envío", "devolución", "dónde", "cómo", "qué", "mi"],
-    "fr": ["le", "la", "les", "est", "sont", "cette", "cet", "pour", "par", "bonjour", "merci", "s'il vous plaît", "commande", "retour", "livraison", "comment", "quoi", "où"],
-    "de": ["der", "die", "das", "ist", "sind", "dieser", "diese", "für", "von", "hallo", "danke", "bitte", "bestellung", "rückgabe", "lieferung", "wie", "was", "wo"],
-}
-
-
-CJK_LANGS = {"zh", "ja", "ko"}
-RTL_LANGS = {"he"}
-
-
-def detect_language(text: str, hint: str = None) -> Tuple[str, float]:
-    """
-    检测文本语言
-
-    参数:
-        text: 待检测文本
-        hint: 用户提示的语言（优先考虑）
-
-    返回:
-        tuple: (language_code, confidence)
-    """
-    if not text or len(text.strip()) == 0:
-        return (hint or "en", 0.5)
-
-    text_lower = text.lower().strip()
-
-    if hint and hint in LANG_INDICATORS:
-        hint_match = _score_language(text_lower, hint)
-        specific_match = _score_specific_chars(text, hint)
-        unicode_match = _score_by_unicode(text, hint)
-        combined_hint = hint_match * 0.4 + specific_match * 0.35 + unicode_match * 0.25
-        if combined_hint >= 0.08 or hint_match > 0 or specific_match > 0:
-            return (hint, min(0.6 + combined_hint * 0.5, 0.95))
-
-    scores = {}
-
-    for lang in LANG_INDICATORS:
-        unicode_score = _score_by_unicode(text, lang)
-        specific_score = _score_specific_chars(text, lang)
-        indicator_score = _score_language(text_lower, lang)
-        scores[lang] = unicode_score * 0.3 + specific_score * 0.4 + indicator_score * 0.3
-
-    latin_langs_has_signal = any(
-        scores.get(l, 0) >= 0.1
-        for l in ["es", "fr", "de"]
-    )
-    if not latin_langs_has_signal:
-        latin_chars = sum(1 for c in text if ord('a') <= ord(c.lower()) <= ord('z'))
-        if latin_chars > len(text) * 0.5:
-            scores["en"] = scores.get("en", 0) + 0.15
-
-    best_lang = max(scores, key=scores.get)
-    best_score = scores[best_lang]
-
-    if best_score < 0.12:
-        return ("en", 0.3)
-
-    confidence = min(0.5 + best_score, 0.95)
-    return (best_lang, confidence)
-
-
-def _score_by_unicode(text: str, lang: str) -> float:
-    ranges = UNICODE_RANGES.get(lang, [])
-    if not ranges:
-        return 0.0
-    total_chars = len(text)
-    if total_chars == 0:
-        return 0.0
-    count = 0
-    for char in text:
-        code = ord(char)
-        for low, high in ranges:
-            if low <= code <= high:
-                count += 1
-                break
-    return count / total_chars
-
-
-def _score_specific_chars(text: str, lang: str) -> float:
-    specific_chars = LANG_SPECIFIC_CHARS.get(lang, [])
-    if not specific_chars:
-        return 0.0
-    text_chars = set(text)
-    matches = sum(1 for c in specific_chars if c in text_chars)
-    if matches == 0:
-        return 0.0
-    return min(matches / 3, 1.0)
-
-
-def _has_word_boundary_issues(lang: str) -> bool:
-    return lang in CJK_LANGS or lang in RTL_LANGS
-
-
-def _score_language(text: str, lang: str) -> float:
-    indicators = LANG_INDICATORS.get(lang, [])
-    if not indicators:
-        return 0.0
-    if _has_word_boundary_issues(lang):
-        matches = sum(1 for indicator in indicators if indicator in text)
-    else:
-        matches = sum(1 for indicator in indicators if re.search(r'\b' + re.escape(indicator) + r'\b', text))
-    return min(matches / max(len(indicators) * 0.2, 1), 1.0)
-
-
-class IntentType(Enum):
-    """
-    意图类型枚举
-
-    定义系统支持的所有用户意图类别
-    """
-    ORDER_QUERY = "order_query"
-    SHIPPING_QUERY = "shipping_query"
-    RETURN_POLICY = "return_policy"
-    PRODUCT_SEARCH = "product_search"
-    GENERAL_FAQ = "general_faq"
-    COMPLAINT = "complaint"
-    HUMAN_TRANSFER = "human_transfer"
-
-
-class IntentRouter:
-    """
-    意图路由器类
-
-    功能：
-    - 基于关键词匹配识别用户意图
-    - 支持多语言（中/英/西/法/德）
-    - 判断是否需要转人工客服
-    - 提供置信度评分
-    """
-
-    def __init__(self):
-        self.intent_keywords = {
-
-            IntentType.ORDER_QUERY: {
-                'zh': ['订单', '订单号', '下单', '购买记录', '我的订单'],
-                'en': ['order', 'order number', 'purchase history', 'my order'],
-                'es': ['pedido', 'número de pedido', 'historial de compras'],
-                'fr': ['commande', 'numéro de commande', 'historique d\'achats'],
-                'de': ['bestellung', 'bestellnummer', 'kaufhistorie']
-            },
-
-            IntentType.SHIPPING_QUERY: {
-                'zh': ['物流', '快递', '配送', '运输', '发货', '到货'],
-                'en': ['shipping', 'delivery', 'tracking', 'logistics', 'shipment'],
-                'es': ['envío', 'entrega', 'seguimiento', 'logística'],
-                'fr': ['expédition', 'livraison', 'suivi', 'logistique'],
-                'de': ['versand', 'lieferung', 'verfolgung', 'logistik']
-            },
-
-            IntentType.RETURN_POLICY: {
-                'zh': ['退货', '退换', '退款', '换货', '售后'],
-                'en': ['return', 'exchange', 'refund', 'after-sales'],
-                'es': ['devolución', 'cambio', 'reembolso', 'postventa'],
-                'fr': ['retour', 'échange', 'remboursement', 'après-vente'],
-                'de': ['rückgabe', 'tausch', 'erstattung', 'kundendienst'],
-            },
-
-            IntentType.PRODUCT_SEARCH: {
-                'zh': ['产品', '商品', '找', '搜索', '有没有', '推荐'],
-                'en': ['product', 'item', 'search for', 'looking for', 'recommend'],
-                'es': ['producto', 'artículo', 'buscar', 'recomendar'],
-                'fr': ['produit', 'article', 'chercher', 'recommander'],
-                'de': ['produkt', 'artikel', 'suchen', 'empfehlen'],
-            },
-
-            IntentType.GENERAL_FAQ: {
-                'zh': ['支付', '付款', '信用卡', '支付宝', '微信', '尺码', '尺寸',
-                       '价格', '多少钱', '费用', '发票', '优惠券', '折扣', '优惠',
-                       '会员', '积分', '客服', '电话', '联系', '地址', '营业时间',
-                       '包邮', '配送费', '税', '关税'],
-                'en': ['payment', 'pay', 'credit card', 'size', 'price', 'how much',
-                       'invoice', 'coupon', 'discount', 'deal', 'membership', 'points',
-                       'customer service', 'phone', 'contact', 'address', 'hours',
-                       'free shipping', 'shipping fee', 'tax', 'duty'],
-                'es': ['pago', 'pagar', 'tarjeta', 'tamaño', 'precio', 'cuánto',
-                       'factura', 'cupón', 'descuento', 'membresía', 'puntos',
-                       'servicio al cliente', 'teléfono', 'contacto', 'dirección',
-                       'horario', 'envío gratis', 'impuesto', 'aduana'],
-                'fr': ['paiement', 'payer', 'carte bancaire', 'taille', 'prix',
-                       'combien', 'facture', 'coupon', 'réduction', 'offre',
-                       'adhésion', 'points', 'service client', 'téléphone', 'contact',
-                       'adresse', 'heures', 'livraison gratuite', 'taxe', 'douane'],
-                'de': ['zahlung', 'bezahlen', 'kreditkarte', 'größe', 'preis',
-                       'wie viel', 'rechnung', 'gutschein', 'rabatt', 'angebot',
-                       'mitgliedschaft', 'punkte', 'kundenservice', 'telefon', 'kontakt',
-                       'adresse', 'öffnungszeiten', 'kostenloser versand', 'steuer', 'zoll']
-            },
-
-            IntentType.COMPLAINT: {
-                'zh': ['投诉', '抱怨', '不满', '差评', '问题', '糟糕'],
-                'en': ['complaint', 'dissatisfied', 'unhappy', 'terrible', 'issue'],
-                'es': ['queja', 'insatisfecho', 'problema', 'terrible'],
-                'fr': ['plainte', 'mécontent', 'problème', 'terrible'],
-                'de': ['beschwerde', 'unzufrieden', 'problem', 'schrecklich']
-            }
-        }
-
-    def detect_intent(self, query: str, language: str = 'zh') -> dict:
-        query_lower = query.lower()
-
-        PRIORITY_INTENTS = {IntentType.COMPLAINT, IntentType.HUMAN_TRANSFER}
-
-        best_intent = IntentType.GENERAL_FAQ
-        best_confidence = 0.0
-
-        for intent, lang_keywords in self.intent_keywords.items():
-            keywords = lang_keywords.get(language, lang_keywords.get('zh', []))
-            matches = sum(1 for keyword in keywords if keyword in query_lower)
-            if matches > 0:
-                confidence = min(0.9, 0.5 + (matches * 0.1))
-                should_take = False
-                if confidence > best_confidence:
-                    should_take = True
-                elif confidence == best_confidence and intent in PRIORITY_INTENTS and best_intent not in PRIORITY_INTENTS:
-                    should_take = True
-                if should_take:
-                    best_intent = intent
-                    best_confidence = confidence
-
-        transfer_keywords = {
-            'zh': ['转人工', '人工客服', '真人', '客服人员', '人工'],
-            'en': ['human agent', 'speak to person', 'real person', 'transfer to human', 'human support'],
-            'es': ['agente humano', 'hablar con persona', 'persona real', 'servicio humano'],
-            'fr': ['agent humain', 'parler à une personne', 'vrai personne', 'service humain'],
-            'de': ['menschlicher agent', 'mit person sprechen', 'echte person', 'menschenkundenservice']
-        }
-        transfer_words = transfer_keywords.get(language, transfer_keywords.get('zh', []))
-        if any(word in query_lower for word in transfer_words):
-            return {
-                'intent': IntentType.HUMAN_TRANSFER,
-                'confidence': 0.95,
-                'language': language,
-                'should_transfer': True,
-                'reason': '用户明确要求转人工'
-            }
-
-        greeting_keywords = {
-            'zh': ['你好', '您好', 'hi', 'hello', '在吗', '在不在', '早上好', '下午好', '晚上好'],
-            'en': ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'],
-            'es': ['hola', 'buenos días', 'buenas tardes', 'buenas noches', 'saludos'],
-            'fr': ['bonjour', 'salut', 'bonsoir', 'bon après-midi'],
-            'de': ['hallo', 'guten morgen', 'guten tag', 'guten abend', 'hi'],
-        }
-        greeting_words = greeting_keywords.get(language, greeting_keywords.get('zh', []))
-        if best_confidence == 0.0 and any(word in query_lower for word in greeting_words):
-            best_confidence = 0.3
-            return {
-                'intent': IntentType.GENERAL_FAQ,
-                'confidence': best_confidence,
-                'language': language,
-                'should_transfer': False,
-                'reason': None
-            }
-
-        return {
-            'intent': best_intent,
-            'confidence': best_confidence,
-            'language': language,
-            'should_transfer': self._should_transfer_to_human(best_intent, best_confidence),
-            'reason': self._get_transfer_reason(best_intent, best_confidence)
-        }
-
-    def _should_transfer_to_human(self, intent: IntentType, confidence: float) -> bool:
-        if intent == IntentType.COMPLAINT:
-            return True
-        if confidence < 0.4:
-            return True
-        return False
-
-    def _get_transfer_reason(self, intent: IntentType, confidence: float) -> Optional[str]:
-        if intent == IntentType.COMPLAINT:
-            return "检测到投诉意图，建议转人工处理"
-        if confidence < 0.4:
-            return f"系统置信度较低({confidence:.2f})，建议转人工确保准确性"
-        return None
-
-    def get_intent_response_template(self, intent: IntentType, language: str = 'zh') -> str:
-        templates = {
-            IntentType.ORDER_QUERY: {
-                'zh': '正在为您查询订单信息...',
-                'en': 'Looking up your order information...',
-                'es': 'Buscando la información de tu pedido...',
-                'fr': 'Recherche des informations de votre commande...',
-                'de': 'Suche nach Ihren Bestellinformationen...',
-            },
-            IntentType.SHIPPING_QUERY: {
-                'zh': '正在为您查询物流状态...',
-                'en': 'Checking shipping status...',
-                'es': 'Verificando el estado del envío...',
-                'fr': 'Vérification du statut d\'expédition...',
-                'de': 'Überprüfung des Versandstatus...',
-            },
-            IntentType.RETURN_POLICY: {
-                'zh': '正在为您查找退换货政策...',
-                'en': 'Finding return and exchange policies...',
-                'es': 'Buscando políticas de devolución y cambio...',
-                'fr': 'Recherche des politiques de retour et échange...',
-                'de': 'Suche nach Rückgabe- und Umtauschrichtlinien...',
-            },
-            IntentType.PRODUCT_SEARCH: {
-                'zh': '正在为您搜索相关商品...',
-                'en': 'Searching for related products...',
-                'es': 'Buscando productos relacionados...',
-                'fr': 'Recherche de produits connexes...',
-                'de': 'Suche nach verwandten Produkten...',
-            },
-            IntentType.GENERAL_FAQ: {
-                'zh': '正在为您查找相关信息...',
-                'en': 'Finding relevant information...',
-                'es': 'Buscando información relevante...',
-                'fr': 'Recherche des informations pertinentes...',
-                'de': 'Suche nach relevanten Informationen...',
-            },
-            IntentType.COMPLAINT: {
-                'zh': '非常抱歉给您带来不便，我们非常重视您的反馈...',
-                'en': 'We sincerely apologize for the inconvenience. We value your feedback...',
-                'es': 'Lamentamos mucho las molestias. Valoramos tu opinión...',
-                'fr': 'Nous nous excusons pour le désagrément. Nous apprécions votre retour...',
-                'de': 'Wir entschuldigen uns für die Unannehmlichkeiten. Wir schätzen Ihr Feedback...',
-            },
-            IntentType.HUMAN_TRANSFER: {
-                'zh': '正在为您转接人工客服...',
-                'en': 'Transferring you to a human agent...',
-                'es': 'Transfiriéndote a un agente humano...',
-                'fr': 'Vous êtes transféré vers un agent humain...',
-                'de': 'Weiterleitung zu einem menschlichen Agenten...',
-            }
-        }
-        intent_templates = templates.get(intent, {})
-        return intent_templates.get(language, intent_templates.get('zh', '正在处理您的请求...'))
-
-
-from typing import List, Dict, Optional
+from typing import Tuple, Optional, List, Dict
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 import uuid
+import re
 
+from app.services.timezone_service import TimezoneService
+from app.services.nlu import IntentRouter, IntentType, detect_language
 from app.config import settings
 from app.rag.retriever import RAGRetriever
 from app.services.compliance import ComplianceService, AuditLogger
+from app.models.order import Order, OrderItem, Shipment
 
 
 class CustomerServiceAgent:
@@ -392,9 +45,16 @@ class CustomerServiceAgent:
 
         detected_lang = language
         if settings.auto_detect_language:
-            detected, conf = detect_language(user_query, hint=language)
-            detected_lang = detected
-            session['language_detected'] = detected_lang
+            hint_lang = session.get('language_detected') or language
+            detected, conf = detect_language(user_query, hint=hint_lang)
+
+            is_short_query = len(user_query.strip()) <= 30
+            has_order_no = bool(re.search(r'(ORD[-–—]?\d{8}[-–—]?\d{3})', user_query, re.IGNORECASE))
+            if (is_short_query or has_order_no) and session.get('language_detected'):
+                detected_lang = session['language_detected']
+            else:
+                detected_lang = detected
+                session['language_detected'] = detected_lang
 
         try:
             compliance_result = self.compliance.check(user_query, language=detected_lang)
@@ -418,6 +78,27 @@ class CustomerServiceAgent:
                 )
 
             intent_result = self.intent_router.detect_intent(user_query, detected_lang)
+
+            if intent_result['intent'] == IntentType.ORDER_QUERY:
+                print(f"[Agent] Handling ORDER_QUERY intent for: {user_query[:50]}")
+                order_result = await self._handle_order_query(
+                    session_id, user_query, intent_result, detected_lang, start_time
+                )
+
+                await AuditLogger.log_event(
+                    db=self.db,
+                    event_type="chat",
+                    session_id=session_id,
+                    user_query=user_query,
+                    response=order_result.get('response'),
+                    intent=intent_result['intent'].value,
+                    language=detected_lang,
+                    confidence=intent_result['confidence'],
+                    should_transfer=False,
+                    compliance_blocked=False,
+                    processing_time_ms=order_result.get('processing_time_ms')
+                )
+                return order_result
 
             if intent_result['should_transfer']:
                 result = await self._handle_human_transfer(
@@ -453,7 +134,9 @@ class CustomerServiceAgent:
 
             result = {
                 'session_id': session_id,
-                'response': rag_result['response'],
+                'response': TimezoneService.append_timezone_promise(
+                    rag_result['response'], detected_lang
+                ),
                 'intent': intent_result['intent'].value,
                 'confidence': intent_result['confidence'],
                 'rag_confidence': rag_result.get('confidence_score', 0),
@@ -546,6 +229,315 @@ class CustomerServiceAgent:
             },
             'success': False
         }
+
+    async def _handle_order_query(
+        self,
+        session_id: str,
+        user_query: str,
+        intent_result: Dict,
+        language: str,
+        start_time: datetime
+    ) -> Dict:
+        """
+        处理订单查询请求
+
+        从用户消息中提取订单号，查询数据库并生成结构化回复
+        """
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        order_no = self._extract_order_no(user_query)
+
+        if not order_no:
+            return {
+                'session_id': session_id,
+                'response': TimezoneService.append_timezone_promise(
+                    self._get_order_not_found_response(language, need_order_no=True), language
+                ),
+                'intent': IntentType.ORDER_QUERY.value,
+                'confidence': intent_result['confidence'],
+                'rag_confidence': 0.0,
+                'language': language,
+                'should_transfer': False,
+                'processing_time_ms': int(processing_time),
+                'context_used': {'products_found': 0, 'faqs_found': 0, 'orders_found': 0},
+                'success': True
+            }
+
+        order_data = await self._query_order_from_db(order_no)
+
+        if not order_data:
+            return {
+                'session_id': session_id,
+                'response': TimezoneService.append_timezone_promise(
+                    self._get_order_not_found_response(language, order_no=order_no), language
+                ),
+                'intent': IntentType.ORDER_QUERY.value,
+                'confidence': intent_result['confidence'],
+                'rag_confidence': 0.0,
+                'language': language,
+                'should_transfer': False,
+                'processing_time_ms': int(processing_time),
+                'context_used': {'products_found': 0, 'faqs_found': 0, 'orders_found': 0},
+                'success': True
+            }
+
+        response_text = self._format_order_response(order_data, language)
+
+        await self._update_session_history(session_id, user_query, response_text)
+
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        return {
+            'session_id': session_id,
+            'response': TimezoneService.append_timezone_promise(response_text, language),
+            'intent': IntentType.ORDER_QUERY.value,
+            'confidence': intent_result['confidence'],
+            'rag_confidence': 1.0,
+            'language': language,
+            'should_transfer': False,
+            'processing_time_ms': int(processing_time),
+            'context_used': {
+                'products_found': 0,
+                'faqs_found': 0,
+                'orders_found': 1
+            },
+            'success': True
+        }
+
+    def _extract_order_no(self, text: str) -> Optional[str]:
+        """
+        从用户消息中提取订单号
+
+        支持格式：
+        - ORD-20240101-001（标准格式）
+        - ord-20240101-001（大小写不敏感）
+        - 纯数字订单号
+        """
+        patterns = [
+            r'(ORD[-–—]?\d{8}[-–—]?\d{3})',
+            r'(?:订单号?|order\s*(?:no|number)?[:：]?\s*)([A-Z]{2,}[-–—]?\d+)',
+            r'(\d{10,})'
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1).upper().replace('–', '-').replace('—', '-')
+
+        return None
+
+    async def _query_order_from_db(self, order_no: str) -> Optional[Dict]:
+        """
+        从数据库查询订单信息（包含订单项和物流信息）
+        """
+        try:
+            print(f"[Order Query] Searching for order: {order_no}")
+            result = await self.db.execute(
+                select(Order).where(Order.order_no == order_no)
+            )
+            order = result.scalar_one_or_none()
+
+            if not order:
+                print(f"[Order Query] Order {order_no} not found in database")
+                return None
+
+            print(f"[Order Query] Found order: {order.order_no} (ID: {order.id})")
+
+            items_result = await self.db.execute(
+                select(OrderItem).where(OrderItem.order_id == order.id)
+            )
+            items = items_result.scalars().all()
+
+            shipment_result = await self.db.execute(
+                select(Shipment).where(Shipment.order_id == order.order_no)
+            )
+            shipment = shipment_result.scalar_one_or_none()
+
+            return {
+                'order_no': order.order_no,
+                'customer_name': order.customer_name,
+                'status': order.status,
+                'total_amount': float(order.total_amount) if order.total_amount else None,
+                'currency': order.currency or 'CNY',
+                'created_at': order.created_at.isoformat() if order.created_at else None,
+                'items': [
+                    {
+                        'product_name': item.product_name,
+                        'product_sku': item.product_sku,
+                        'quantity': item.quantity,
+                        'unit_price': float(item.unit_price) if item.unit_price else None
+                    }
+                    for item in items
+                ],
+                'shipment': {
+                    'tracking_number': shipment.tracking_number,
+                    'carrier': shipment.carrier,
+                    'status': shipment.status,
+                    'estimated_delivery': shipment.estimated_delivery.isoformat() if shipment and shipment.estimated_delivery else None
+                } if shipment else None
+            }
+
+        except Exception as e:
+            print(f"Error querying order {order_no}: {e}")
+            return None
+
+    def _format_order_response(self, order_data: Dict, language: str) -> str:
+        """
+        格式化订单信息为用户友好的多语言回复
+        """
+        status_map = {
+            'zh': {'pending': '待处理', 'paid': '已支付', 'shipped': '已发货', 'delivered': '已送达', 'cancelled': '已取消'},
+            'en': {'pending': 'Pending', 'paid': 'Paid', 'shipped': 'Shipped', 'delivered': 'Delivered', 'cancelled': 'Cancelled'},
+            'es': {'pending': 'Pendiente', 'paid': 'Pagado', 'shipped': 'Enviado', 'delivered': 'Entregado', 'cancelado': 'Cancelado'},
+            'fr': {'pending': 'En attente', 'payé': 'Payé', 'expédié': 'Expédié', 'livré': 'Livré', 'annulé': 'Annulé'},
+            'de': {'pending': 'Ausstehend', 'bezahlt': 'Bezahlt', 'versandet': 'Versendet', 'geliefert': 'Geliefert', 'storniert': 'Storniert'}
+        }
+
+        status_texts = status_map.get(language, status_map['zh'])
+        status_text = status_texts.get(order_data['status'], order_data['status'])
+
+        if language == 'zh':
+            response = f"找到您的订单信息：\n\n"
+            response += f"订单号：{order_data['order_no']}\n"
+            response += f"客户：{order_data['customer_name']}\n"
+            response += f"状态：{status_text}\n"
+            response += f"金额：¥{order_data['total_amount']:.2f}\n"
+            response += f"下单时间：{order_data['created_at'][:10]}\n\n"
+
+            if order_data['items']:
+                response += "商品清单：\n"
+                for idx, item in enumerate(order_data['items'], 1):
+                    response += f"  {idx}. {item['product_name']} x{item['quantity']} (¥{item['unit_price']:.2f})\n"
+
+            if order_data.get('shipment'):
+                ship = order_data['shipment']
+                response += f"\n物流信息：\n"
+                response += f"   快递公司：{ship['carrier']}\n"
+                response += f"   运单号：{ship['tracking_number']}\n"
+                if ship.get('estimated_delivery'):
+                    response += f"   预计送达：{ship['estimated_delivery'][:10]}\n"
+
+            response += "\n如需帮助，请随时告诉我！"
+
+        elif language == 'en':
+            response = f"Order Found:\n\n"
+            response += f"Order No: {order_data['order_no']}\n"
+            response += f"Customer: {order_data['customer_name']}\n"
+            response += f"Status: {status_text}\n"
+            response += f"Amount: ${order_data['total_amount']:.2f}\n"
+            response += f"Order Date: {order_data['created_at'][:10]}\n\n"
+
+            if order_data['items']:
+                response += "Items:\n"
+                for idx, item in enumerate(order_data['items'], 1):
+                    response += f"  {idx}. {item['product_name']} x{item['quantity']} (${item['unit_price']:.2f})\n"
+
+            if order_data.get('shipment'):
+                ship = order_data['shipment']
+                response += f"\nShipping Info:\n"
+                response += f"   Carrier: {ship['carrier']}\n"
+                response += f"   Tracking No: {ship['tracking_number']}\n"
+                if ship.get('estimated_delivery'):
+                    response += f"   Est. Delivery: {ship['estimated_delivery'][:10]}\n"
+
+            response += "\nLet me know if you need any help!"
+
+        elif language == 'es':
+            response = f"Pedido Encontrado:\n\n"
+            response += f"Número de pedido: {order_data['order_no']}\n"
+            response += f"Cliente: {order_data['customer_name']}\n"
+            response += f"Estado: {status_text}\n"
+            response += f"Monto: ${order_data['total_amount']:.2f}\n"
+            response += f"Fecha del pedido: {order_data['created_at'][:10]}\n\n"
+
+            if order_data['items']:
+                response += "Artículos:\n"
+                for idx, item in enumerate(order_data['items'], 1):
+                    response += f"  {idx}. {item['product_name']} x{item['quantity']} (${item['unit_price']:.2f})\n"
+
+            if order_data.get('shipment'):
+                ship = order_data['shipment']
+                response += f"\nInformación de envío:\n"
+                response += f"   Transportista: {ship['carrier']}\n"
+                response += f"   Número de seguimiento: {ship['tracking_number']}\n"
+                if ship.get('estimated_delivery'):
+                    response += f"   Entrega estimada: {ship['estimated_delivery'][:10]}\n"
+
+            response += "\n¡Avísame si necesitas ayuda!"
+
+        elif language == 'fr':
+            response = f"Commande Trouvée:\n\n"
+            response += f"Numéro de commande: {order_data['order_no']}\n"
+            response += f"Client: {order_data['customer_name']}\n"
+            response += f"Statut: {status_text}\n"
+            response += f"Montant: ${order_data['total_amount']:.2f}\n"
+            response += f"Date de commande: {order_data['created_at'][:10]}\n\n"
+
+            if order_data['items']:
+                response += "Articles:\n"
+                for idx, item in enumerate(order_data['items'], 1):
+                    response += f"  {idx}. {item['product_name']} x{item['quantity']} (${item['unit_price']:.2f})\n"
+
+            if order_data.get('shipment'):
+                ship = order_data['shipment']
+                response += f"\nInformations d'expédition:\n"
+                response += f"   Transporteur: {ship['carrier']}\n"
+                response += f"   Numéro de suivi: {ship['tracking_number']}\n"
+                if ship.get('estimated_delivery'):
+                    response += f"   Livraison estimée: {ship['estimated_delivery'][:10]}\n"
+
+            response += "\nFaites-moi savoir si vous avez besoin d'aide!"
+
+        elif language == 'de':
+            response = f"Bestellung Gefunden:\n\n"
+            response += f"Bestellnummer: {order_data['order_no']}\n"
+            response += f"Kunde: {order_data['customer_name']}\n"
+            response += f"Status: {status_text}\n"
+            response += f"Betrag: ${order_data['total_amount']:.2f}\n"
+            response += f"Bestelldatum: {order_data['created_at'][:10]}\n\n"
+
+            if order_data['items']:
+                response += "Artikel:\n"
+                for idx, item in enumerate(order_data['items'], 1):
+                    response += f"  {idx}. {item['product_name']} x{item['quantity']} (${item['unit_price']:.2f})\n"
+
+            if order_data.get('shipment'):
+                ship = order_data['shipment']
+                response += f"\nVersandinformationen:\n"
+                response += f"   Transporteur: {ship['carrier']}\n"
+                response += f"   Sendungsnummer: {ship['tracking_number']}\n"
+                if ship.get('estimated_delivery'):
+                    response += f"   Voraussichtliche Lieferung: {ship['estimated_delivery'][:10]}\n"
+
+            response += "\nLassen Sie es mich wissen, wenn Sie Hilfe benötigen!"
+
+        else:
+            response = f"订单信息：{order_data['order_no']} 状态:{status_text} 金额:{order_data['total_amount']}"
+
+        return response
+
+    def _get_order_not_found_response(self, language: str, need_order_no: bool = False, order_no: str = None) -> str:
+        """
+        生成订单未找到的友好提示
+        """
+        if need_order_no:
+            messages = {
+                'zh': "请问您的订单号是多少？我可以帮您查询订单状态和物流信息。",
+                'en': "Could you please provide your order number? I can help you check the order status and shipping information.",
+                'es': "¿Podría proporcionarme su número de pedido? Puedo ayudarle a verificar el estado del envío.",
+                'fr': "Pourriez-vous me donner votre numéro de commande ? Je peux vous aider à vérifier le statut de la commande.",
+                'de': "Könnten Sie mir Ihre Bestellnummer geben? Ich kann Ihnen helfen, den Bestellstatus zu überprüfen."
+            }
+        else:
+            messages = {
+                'zh': f"抱歉，未找到订单号 {order_no} 的信息。请确认订单号是否正确，或提供其他订单号。",
+                'en': f"Sorry, I couldn't find order {order_no}. Please verify the order number or provide a different one.",
+                'es': f"Lo siento, no encontré el pedido {order_no}. Verifique el número o proporcione otro.",
+                'fr': f"Désolé, je n'ai pas trouvé la commande {order_no}. Vérifiez le numéro ou fournissez-en un autre.",
+                'de': f"Entschuldigung, ich konnte die Bestellung {order_no} nicht finden. Überprüfen Sie die Nummer oder geben Sie eine andere an."
+            }
+
+        return messages.get(language, messages['zh'])
 
     async def _get_or_create_session(self, session_id: str) -> Dict:
         sessions = CustomerServiceAgent._sessions

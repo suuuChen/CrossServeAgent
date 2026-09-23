@@ -13,8 +13,8 @@ export default function App() {
         <div className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xl shadow-lg">
-                🤖
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-sm tracking-tight">MA</span>
               </div>
               <div>
                 <h1 className="text-lg font-bold text-slate-800">跨境电商多语言智能Agent平台</h1>
@@ -32,7 +32,7 @@ export default function App() {
                   : 'text-slate-600 hover:text-slate-800'
               }`}
             >
-              💬 客服Agent工作台
+              客服Agent工作台
             </button>
             <button
               onClick={() => setActiveWorkbench('operations')}
@@ -42,7 +42,7 @@ export default function App() {
                   : 'text-slate-600 hover:text-slate-800'
               }`}
             >
-              📊 运营Agent工作台
+              运营Agent工作台
             </button>
           </div>
 

@@ -33,7 +33,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
       const response: ChatResponse = await chatApi.sendMessage(msg, 'auto', sessionId || undefined);
       
       // 显示AI客服回复（右侧）
-      setMessages(prev => [...prev, { role: 'assistant', content: response.message }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: response.response }]);
       
       // 保存会话ID
       if (!sessionId && response.session_id) {
@@ -46,7 +46,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
         setTimeout(() => {
           setMessages(prev => [...prev, { 
             role: 'assistant', 
-            content: '⚠️ 您的问题需要人工客服处理，正在为您转接，请稍候...' 
+            content: '您的问题需要人工客服处理，正在为您转接，请稍候...' 
           }]);
           onTransfer();
         }, 500);
@@ -54,7 +54,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
     } catch (error) {
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: '❌ 抱歉，系统暂时繁忙，请稍后再试或直接联系我们的人工客服。' 
+        content: '抱歉，系统暂时繁忙，请稍后再试或直接联系我们的人工客服。' 
       }]);
     } finally {
       setLoading(false);
@@ -78,12 +78,12 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
             
             {/* 客服头像 */}
             <div className="w-20 h-20 mb-4 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-3xl shadow-lg">
-              🤖
+              客服
             </div>
 
             {/* 欢迎语 */}
             <h2 className="text-xl font-bold text-slate-800 mb-2">
-              您好！我是智能客服助手 👋
+              您好！我是智能客服助手
             </h2>
             <p className="text-sm text-slate-600 max-w-md mb-6">
               我可以帮您查询订单、物流信息、退换货政策等问题。<br />
@@ -95,10 +95,10 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
               <div className="text-xs text-slate-500 font-medium mb-2 text-left">常见问题：</div>
               
               {[
-                { icon: '📦', text: '我的订单什么时候发货？', msg: '我的订单什么时候发货？' },
-                { icon: '🚚', text: '物流查询：我的包裹到哪了？', msg: '我的包裹到哪了？' },
-                { icon: '↩️', text: '如何申请退换货？', msg: '我想退货，怎么操作？' },
-                { icon: '⏰', text: '客服工作时间是几点？', msg: '你们客服工作时间是几点？' },
+                { text: '我的订单什么时候发货？', msg: '我的订单什么时候发货？' },
+                { text: '物流查询：我的包裹到哪了？', msg: '我的包裹到哪了？' },
+                { text: '如何申请退换货？', msg: '我想退货，怎么操作？' },
+                { text: '客服工作时间是几点？', msg: '你们客服工作时间是几点？' },
               ].map((item, index) => (
                 <button
                   key={index}
@@ -109,7 +109,6 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
                   }}
                   className="w-full text-left px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-sm text-slate-700 shadow-sm hover:shadow-md"
                 >
-                  <span className="mr-2">{item.icon}</span>
                   {item.text}
                 </button>
               ))}
@@ -131,7 +130,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
                       ? 'bg-gradient-to-br from-green-400 to-green-600 text-white'
                       : 'bg-gradient-to-br from-blue-500 to-purple-600 text-white'
                   }`}>
-                    {msg.role === 'user' ? '👤' : '🤖'}
+                    {msg.role === 'user' ? '我' : '客服'}
                   </div>
 
                   {/* 消息气泡 */}
@@ -151,7 +150,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
               <div className="flex justify-start">
                 <div className="flex items-end gap-2">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm">
-                    🤖
+                    客服
                   </div>
                   <div className="px-4 py-3 bg-white rounded-2xl rounded-bl-none shadow-sm border border-slate-200">
                     <div className="flex items-center gap-1 text-slate-500">
@@ -192,7 +191,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
               
               {/* 表情/附件按钮（可选） */}
               <button className="absolute right-3 bottom-3 text-slate-400 hover:text-slate-600 transition">
-                😊
+                +
               </button>
             </div>
             
@@ -203,18 +202,11 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
             >
               {loading ? (
                 <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
                   处理中
                 </>
               ) : (
                 <>
                   发送
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
                 </>
               )}
             </button>
@@ -222,7 +214,7 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
           
           {/* 提示文字 */}
           <div className="mt-2 text-[10px] text-slate-400 text-center">
-            💡 提示：按 Enter 发送，Shift+Enter 换行 · 支持多语言自动识别 · 7x24小时在线服务
+            提示：按 Enter 发送，Shift+Enter 换行 · 支持多语言自动识别 · 7x24小时在线服务
           </div>
         </div>
       </div>

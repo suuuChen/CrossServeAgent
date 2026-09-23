@@ -159,9 +159,9 @@ def analyze_results(results: list, elapsed: float, concurrency: int, total_reque
     rate_ok = success_rate >= 99
 
     print(f"\n  验收标准检查:")
-    print(f"    P99 < 3000ms:     {'✓ PASS' if p99_ok else '✗ FAIL'} ({sorted(latencies)[int(len(latencies)*0.99)]:.1f}ms)")
-    print(f"    错误率 < 1%:      {'✓ PASS' if rate_ok else '✗ FAIL'} ({100-success_rate:.1f}%)")
-    print(f"    目标并发 {concurrency}: {'✓ PASS' if p99_ok and rate_ok else '✗ FAIL'}")
+    print(f"    P99 < 3000ms:     {' PASS' if p99_ok else ' FAIL'} ({sorted(latencies)[int(len(latencies)*0.99)]:.1f}ms)")
+    print(f"    错误率 < 1%:      {' PASS' if rate_ok else ' FAIL'} ({100-success_rate:.1f}%)")
+    print(f"    目标并发 {concurrency}: {' PASS' if p99_ok and rate_ok else ' FAIL'}")
 
     return p99_ok and rate_ok
 

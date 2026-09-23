@@ -1,10 +1,11 @@
 """
-文本向量化服务（调用OpenAI Embedding API）
+文本向量化服务（支持本地模型和OpenAI API）
+优先使用本地sentence-transformers模型，无需API key
 """
 
-from typing import List, Optional
+from typing import List
 import numpy as np
-from openai import OpenAI
+import hashlib
 from app.config import settings
 
 
@@ -13,14 +14,39 @@ class EmbeddingService:
     文本向量化服务类
     
     功能：将文本转换为高维向量（用于语义搜索）
-    模型：text-embedding-3-large（1536维）
+    
+    策略：
+    1. 优先使用本地 sentence-transformers 模型（无需API key）
+    2. 可选降级到 OpenAI API（需要有效key）
+    3. 最终降级到哈希向量（保证可用性）
     """
 
     def __init__(self):
-        """初始化OpenAI客户端"""
-        self.client = OpenAI(api_key=settings.openai_api_key)
-        self.model = settings.embedding_model  # 向量化模型名称
-        self.dimension = settings.vector_dimension  # 向量维度
+        """初始化向量化服务（延迟加载模型）"""
+        self.model = None
+        self.client = None
+        self.dimension = settings.vector_dimension
+        self.use_local_model = True
+        self._model_loaded = False
+
+    def _ensure_model_loaded(self):
+        """延迟加载本地模型（首次使用时才加载）"""
+        if self._model_loaded:
+            return
+
+        try:
+            print("Loading local embedding model (sentence-transformers)...")
+            from sentence_transformers import SentenceTransformer
+            self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+            self.dimension = self.model.get_sentence_embedding_dimension()
+            print(f"Local model loaded successfully (dimension={self.dimension})")
+            self._model_loaded = True
+            self.use_local_model = True
+        except Exception as e:
+            print(f"Failed to load local model: {e}")
+            print("Falling back to hash-based embeddings")
+            self._model_loaded = True
+            self.use_local_model = False
 
     async def embed_text(self, text: str) -> List[float]:
         """
@@ -30,17 +56,18 @@ class EmbeddingService:
             text: 待向量化的文本
             
         返回:
-            1536维浮点数列表（失败时返回零向量）
+            维浮点数列表
         """
-        try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=text
-            )
-            return response.data[0].embedding  # 提取第一个结果的向量
-        except Exception as e:
-            print(f"Error embedding text: {e}")
-            return [0.0] * self.dimension  # 异常降级：返回零向量
+        self._ensure_model_loaded()
+
+        if self.use_local_model and self.model:
+            try:
+                embedding = self.model.encode(text)
+                return embedding.tolist()
+            except Exception as e:
+                print(f"Error with local model: {e}, falling back to hash")
+
+        return self._hash_embedding(text)
 
     async def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """
@@ -50,17 +77,18 @@ class EmbeddingService:
             texts: 文本列表
             
         返回:
-            向量列表（每个文本对应一个1536维向量）
+            向量列表
         """
-        try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=texts
-            )
-            return [item.embedding for item in response.data]
-        except Exception as e:
-            print(f"Error embedding texts: {e}")
-            return [[0.0] * self.dimension for _ in texts]  # 异常降级
+        self._ensure_model_loaded()
+
+        if self.use_local_model and self.model:
+            try:
+                embeddings = self.model.encode(texts)
+                return [emb.tolist() for emb in embeddings]
+            except Exception as e:
+                print(f"Error with local model batch: {e}, falling back to hash")
+
+        return [self._hash_embedding(text) for text in texts]
 
     async def embed_product(self, product_data: dict) -> List[float]:
         """
@@ -70,7 +98,7 @@ class EmbeddingService:
             product_data: 商品字典（需包含name和description字段）
             
         返回:
-            商品的1536维向量表示
+            商品的向量表示
         """
         text_to_embed = f"{product_data.get('name', '')} {product_data.get('description', '')}"
         return await self.embed_text(text_to_embed)
@@ -84,12 +112,34 @@ class EmbeddingService:
             answer: 答案文本
             
         返回:
-            FAQ的1536维向量表示
+            FAQ的向量表示
         """
         text_to_embed = f"{question} {answer}"
         return await self.embed_text(text_to_embed)
 
-    def cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _hash_embedding(self, text: str) -> List[float]:
+        """
+        基于哈希的简单向量化（最终降级方案）
+        
+        使用文本的哈希值生成固定维度的向量
+        虽然语义信息有限，但能保证系统可用性
+        """
+        hash_obj = hashlib.sha256(text.encode('utf-8'))
+        hash_hex = hash_obj.hexdigest()
+        
+        vector = []
+        for i in range(0, min(len(hash_hex), self.dimension * 2), 2):
+            hex_pair = hash_hex[i:i+2]
+            value = int(hex_pair, 16) / 255.0 - 0.5
+            vector.append(value)
+        
+        while len(vector) < self.dimension:
+            vector.append(0.0)
+        
+        return vector[:self.dimension]
+
+    @staticmethod
+    def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
         """
         计算余弦相似度（衡量两个向量的相似程度）
         
@@ -99,28 +149,22 @@ class EmbeddingService:
             
         返回:
             相似度分数 [0, 1]（1表示完全相同，0表示完全不同）
-            
-        公式：cos(θ) = (A·B) / (||A|| × ||B||)
         """
         if not vec1 or not vec2:
             return 0.0
-        
+
         vec1_array = np.array(vec1)
         vec2_array = np.array(vec2)
-        
-        # 点积（分子）
+
         dot_product = np.dot(vec1_array, vec2_array)
-        
-        # 向量模长（分母）
         norm1 = np.linalg.norm(vec1_array)
         norm2 = np.linalg.norm(vec2_array)
-        
-        # 防止除以零
+
         if norm1 == 0 or norm2 == 0:
             return 0.0
-        
-        return dot_product / (norm1 * norm2)
+
+        return float(dot_product / (norm1 * norm2))
 
 
-# 全局单例实例（所有模块共享）
+# 全局单例实例（延迟初始化，不会在导入时失败）
 embedding_service = EmbeddingService()

@@ -9,11 +9,11 @@ type OperationsTab = 'listing' | 'reviews' | 'ads' | 'dashboard';
 export default function OperationsWorkbench() {
   const [activeTab, setActiveTab] = useState<OperationsTab>('listing');
 
-  const tabs: { id: OperationsTab; label: string; icon: string; desc: string }[] = [
-    { id: 'listing', label: '商品Listing', icon: '📝', desc: '多平台自动生成' },
-    { id: 'reviews', label: '评论分析', icon: '📊', desc: '情感与主题聚类' },
-    { id: 'ads', label: '广告词生成', icon: '🎯', desc: 'PPC智能建议' },
-    { id: 'dashboard', label: '数据报表', icon: '📈', desc: '运营统计分析' },
+  const tabs: { id: OperationsTab; label: string; desc: string }[] = [
+    { id: 'listing', label: '商品Listing', desc: '多平台自动生成' },
+    { id: 'reviews', label: '评论分析', desc: '情感与主题聚类' },
+    { id: 'ads', label: '广告词生成', desc: 'PPC智能建议' },
+    { id: 'dashboard', label: '数据报表', desc: '运营统计分析' },
   ];
 
   const renderContent = (): React.ReactNode => {
@@ -49,7 +49,6 @@ export default function OperationsWorkbench() {
                     : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
-                <span className="mr-2.5 text-base">{tab.icon}</span>
                 {tab.label}
               </button>
             ))}

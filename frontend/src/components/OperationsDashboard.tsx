@@ -23,17 +23,17 @@ export default function OperationsDashboard() {
   ];
 
   const platformStats = [
-    { platform: 'Amazon', icon: '🛒', listings: 89, reviews: 1523, ads: 45, color: 'amber' },
-    { platform: 'Temu', icon: '🛍️', listings: 42, reviews: 856, ads: 23, color: 'orange' },
-    { platform: 'TikTok Shop', icon: '🎵', listings: 25, reviews: 468, ads: 21, color: 'slate' },
+    { platform: 'Amazon', listings: 89, reviews: 1523, ads: 45, color: 'amber' },
+    { platform: 'Temu', listings: 42, reviews: 856, ads: 23, color: 'orange' },
+    { platform: 'TikTok Shop', listings: 25, reviews: 468, ads: 21, color: 'slate' },
   ];
 
   const languageDistribution = [
-    { language: '英语 🇬🇧', percentage: 36, count: 54 },
-    { language: '中文 🇨🇳', percentage: 26, count: 39 },
-    { language: '西班牙语 🇪🇸', percentage: 19, count: 28 },
-    { language: '法语 🇫🇷', percentage: 13, count: 19 },
-    { language: '德语 🇩🇪', percentage: 6, count: 11 },
+    { language: '英语', percentage: 36, count: 54 },
+    { language: '中文', percentage: 26, count: 39 },
+    { language: '西班牙语', percentage: 19, count: 28 },
+    { language: '法语', percentage: 13, count: 19 },
+    { language: '德语', percentage: 6, count: 11 },
   ];
 
   return (
@@ -61,34 +61,30 @@ export default function OperationsDashboard() {
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-slate-500">Listing生成</div>
-            <span className="text-2xl">📝</span>
           </div>
           <div className="text-3xl font-bold text-slate-800">{statsData.listing_generated}</div>
-          <div className="text-xs text-green-600 mt-1">↑ 12% 较上期</div>
+          <div className="text-xs text-green-600 mt-1">较上期增长 12%</div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-slate-500">评论分析</div>
-            <span className="text-2xl">📊</span>
           </div>
           <div className="text-3xl font-bold text-slate-800">{statsData.reviews_analyzed.toLocaleString()}</div>
-          <div className="text-xs text-green-600 mt-1">↑ 23% 较上期</div>
+          <div className="text-xs text-green-600 mt-1">较上期增长 23%</div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-slate-500">广告创建</div>
-            <span className="text-2xl">🎯</span>
           </div>
           <div className="text-3xl font-bold text-slate-800">{statsData.ads_created}</div>
-          <div className="text-xs text-green-600 mt-1">↑ 8% 较上期</div>
+          <div className="text-xs text-green-600 mt-1">较上期增长 8%</div>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-slate-500">支持语言</div>
-            <span className="text-2xl">🌍</span>
           </div>
           <div className="text-3xl font-bold text-slate-800">{statsData.languages_used}</div>
           <div className="text-xs text-slate-400 mt-1">多语言覆盖</div>
@@ -97,7 +93,6 @@ export default function OperationsDashboard() {
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs text-slate-500">连接平台</div>
-            <span className="text-2xl">🔗</span>
           </div>
           <div className="text-3xl font-bold text-slate-800">{statsData.platforms_connected}</div>
           <div className="text-xs text-slate-400 mt-1">主流平台</div>
@@ -106,13 +101,12 @@ export default function OperationsDashboard() {
 
       <div className="grid grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">📈 各平台数据</h3>
+          <h3 className="font-semibold text-slate-800 mb-4">各平台数据</h3>
           <div className="space-y-4">
             {platformStats.map(platform => (
               <div key={platform.platform} className="border border-slate-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">{platform.icon}</span>
                     <span className="font-semibold text-slate-800">{platform.platform}</span>
                   </div>
                   <span className={`px-2 py-1 text-xs font-medium rounded bg-${platform.color}-100 text-${platform.color}-700`}>
@@ -139,7 +133,7 @@ export default function OperationsDashboard() {
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">🌍 语言使用分布</h3>
+          <h3 className="font-semibold text-slate-800 mb-4">语言使用分布</h3>
           <div className="space-y-3">
             {languageDistribution.map((lang, idx) => (
               <div key={lang.language}>
@@ -160,7 +154,7 @@ export default function OperationsDashboard() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h3 className="font-semibold text-slate-800 mb-4">🕐 最近活动</h3>
+        <h3 className="font-semibold text-slate-800 mb-4">最近活动</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -182,7 +176,6 @@ export default function OperationsDashboard() {
                       activity.type === 'review' ? 'bg-blue-100 text-blue-700' :
                       'bg-orange-100 text-orange-700'
                     }`}>
-                      {activity.type === 'listing' ? '📝' : activity.type === 'review' ? '📊' : '🎯'}
                       {activity.type === 'listing' ? 'Listing' : activity.type === 'review' ? '评论' : '广告'}
                     </span>
                   </td>
@@ -196,8 +189,8 @@ export default function OperationsDashboard() {
                       activity.status === 'warning' ? 'text-yellow-600' :
                       'text-red-600'
                     }`}>
-                      {activity.status === 'success' ? '✅ 成功' :
-                       activity.status === 'warning' ? '⚠️ 警告' : '❌ 失败'}
+                      {activity.status === 'success' ? '成功' :
+                       activity.status === 'warning' ? '警告' : '失败'}
                     </span>
                   </td>
                 </tr>

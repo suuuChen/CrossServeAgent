@@ -165,26 +165,26 @@ class ComplianceService:
             lang_note = f"text is in {language}" if language else "text may be mixed language"
 
             prompt = f"""请检查以下跨境电商客服对话内容是否包含违规信息。违规类型包括:
-1. 政治敏感话题
-2. 种族/民族歧视
-3. 宗教亵渎
-4. 暴力/威胁/自残
-5. 色情/低俗内容
-6. 违禁商品（毒品/枪支/仿牌/电子烟/处方药/种子/活体动物）
-7. 诈骗（刷单/洗钱/套现/钓鱼）
-8. 严重文化禁忌
-
-{lang_note}
-"对话内容": "{text[:500]}"
-
-请以 JSON 格式返回:
-{{
-    "blocked": true/false,
-    "category": "违规分类",
-    "severity": "high/medium/low",
-    "reason": "判断理由",
-    "confidence": 0.0-1.0
-}}"""
+            1. 政治敏感话题
+            2. 种族/民族歧视
+            3. 宗教亵渎
+            4. 暴力/威胁/自残
+            5. 色情/低俗内容
+            6. 违禁商品（毒品/枪支/仿牌/电子烟/处方药/种子/活体动物）
+            7. 诈骗（刷单/洗钱/套现/钓鱼）
+            8. 严重文化禁忌
+            
+            {lang_note}
+            "对话内容": "{text[:500]}"
+            
+            请以 JSON 格式返回:
+            {{
+                "blocked": true/false,
+                "category": "违规分类",
+                "severity": "high/medium/low",
+                "reason": "判断理由",
+                "confidence": 0.0-1.0
+            }}"""
 
             response = client.chat.completions.create(
                 model=settings.openai_model,

@@ -54,12 +54,12 @@ def _generate_title(product: Dict, platform: str, variant_num: int = 1) -> str:
         "temu": [
             "{name} | {key_feature} | Best {category}",
             "{brand} {name} - {key_feature} {category}",
-            "🔥 {name} {key_feature} {category} Hot Sale!"
+            "{name} {key_feature} {category} Hot Sale!"
         ],
         "tiktok_shop": [
             "{name} - {key_feature} You Need!",
             "{brand} {name} | {key_feature}",
-            "✨ {name} {key_feature} {category}"
+            "{name} {key_feature} {category}"
         ]
     }
 
@@ -82,9 +82,9 @@ def _generate_title(product: Dict, platform: str, variant_num: int = 1) -> str:
 
 def _generate_bullets(product: Dict, platform: str, variant_num: int = 1) -> List[str]:
     feat_template = {
-        "amazon": "✅ {feature}",
-        "temu": "⚡ {feature}",
-        "tiktok_shop": "⭐ {feature}"
+        "amazon": "{feature}",
+        "temu": "{feature}",
+        "tiktok_shop": "{feature}"
     }
 
     feat_format = feat_template.get(platform, feat_template["amazon"])
@@ -113,9 +113,9 @@ def _generate_description(product: Dict, platform: str, variant_num: int = 1) ->
             "Experience the perfect blend of quality and functionality with our {brand} {name}. "
             "{description}\n\n"
             "Key Benefits:\n"
-            "🎯 Designed for {audience}\n"
-            "🏆 Premium craftsmanship you can feel\n"
-            "💯 Satisfaction guaranteed\n\n"
+            "Designed for {audience}\n"
+            "Premium craftsmanship you can feel\n"
+            "Satisfaction guaranteed\n\n"
             "Whether you're looking for everyday essentials or something special, our {category} "
             "delivers excellence in every detail."
         ),
@@ -126,7 +126,7 @@ def _generate_description(product: Dict, platform: str, variant_num: int = 1) ->
         ),
         "tiktok_shop": (
             "You'll love our {brand} {name}! {description}\n"
-            "{audience}, this one's for you! Shop now and join thousands of happy customers. 🛍️✨"
+            "{audience}, this one's for you! Shop now and join thousands of happy customers."
         )
     }
 
@@ -150,9 +150,9 @@ def _generate_a_plus_content(product: Dict, platform: str) -> Optional[Dict]:
                        f"{product.get('category', 'products')} that enrich people's lives. "
                        f"Founded on the principles of quality and innovation.",
         "product_highlights": [
-            f"🎨 Beautifully designed {product.get('category', 'product')} that complements any style",
-            f"🔧 Built with premium materials for long-lasting durability",
-            f"💡 Thoughtful features that make everyday life easier"
+            f"Beautifully designed {product.get('category', 'product')} that complements any style",
+            f"Built with premium materials for long-lasting durability",
+            f"Thoughtful features that make everyday life easier"
         ],
         "use_cases": [
             f"Perfect for {product.get('target_audience', 'everyone')}",

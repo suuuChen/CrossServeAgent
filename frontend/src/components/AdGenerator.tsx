@@ -1,10 +1,10 @@
 import { useState } from 'react';
 
 const AD_PLATFORMS = [
-  { id: 'amazon_ppc', label: 'Amazon PPC', icon: '🛒' },
-  { id: 'google_ads', label: 'Google Ads', icon: '🔍' },
-  { id: 'facebook_ads', label: 'Facebook Ads', icon: '📘' },
-  { id: 'tiktok_ads', label: 'TikTok Ads', icon: '🎵' },
+  { id: 'amazon_ppc', label: 'Amazon PPC' },
+  { id: 'google_ads', label: 'Google Ads' },
+  { id: 'facebook_ads', label: 'Facebook Ads' },
+  { id: 'tiktok_ads', label: 'TikTok Ads' },
 ];
 
 export default function AdGenerator() {
@@ -36,23 +36,23 @@ export default function AdGenerator() {
         ad_copies: [
           {
             type: '标题广告',
-            headline: '🏃‍♂️ 轻便透气跑步鞋 | 减震科技 | 限时特惠',
+            headline: '轻便透气跑步鞋 | 减震科技 | 限时特惠',
             description: '专业马拉松级跑鞋，响应式缓震系统，让每一步都舒适自如',
-            cta: '立即购买 →',
+            cta: '立即购买',
             estimated_ctr: '3.2%'
           },
           {
             type: '搜索广告',
             headline: '2024新款运动鞋 | 透气网面 | 5折起',
             description: '超轻量化设计，适合跑步健身，今日下单包邮',
-            cta: '查看详情 →',
+            cta: '查看详情',
             estimated_ctr: '2.8%'
           },
           {
             type: '展示广告',
-            headline: '🔥 爆款跑步鞋 | 10000+好评 | 7天无理由退换',
+            headline: '爆款跑步鞋 | 10000+好评 | 7天无理由退换',
             description: '时尚外观+专业性能，运动达人首选',
-            cta: '抢购 →',
+            cta: '抢购',
             estimated_ctr: '2.5%'
           }
         ],
@@ -135,7 +135,6 @@ export default function AdGenerator() {
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <span>{p.icon}</span>
                     {p.label}
                   </button>
                 ))}
@@ -170,7 +169,7 @@ export default function AdGenerator() {
               disabled={generating || !productName}
               className="w-full py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm font-medium rounded-lg hover:from-orange-600 hover:to-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md"
             >
-              {generating ? '⏳ 生成中...' : '🎯 智能生成广告'}
+              {generating ? '生成中...' : '智能生成广告'}
             </button>
           </div>
         </div>
@@ -199,7 +198,7 @@ export default function AdGenerator() {
 
               <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-slate-800">🔑 推荐关键词</h3>
+                  <h3 className="font-semibold text-slate-800">推荐关键词</h3>
                   <span className="text-xs text-slate-500">建议出价: {results.budget_suggestion.recommended_bid_range}</span>
                 </div>
                 <div className="overflow-x-auto">
@@ -247,7 +246,7 @@ export default function AdGenerator() {
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 className="font-semibold text-slate-800 mb-4">✨ 广告文案建议</h3>
+                <h3 className="font-semibold text-slate-800 mb-4">广告文案建议</h3>
                 <div className="space-y-4">
                   {results.ad_copies.map((ad: any, idx: number) => (
                     <div key={idx} className="border border-slate-200 rounded-lg p-4 hover:border-orange-300 transition">
@@ -276,7 +275,7 @@ export default function AdGenerator() {
           ) : (
             <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
               <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-4xl mb-4">
-                🎯
+                广告
               </div>
               <h3 className="text-lg font-semibold text-slate-700 mb-2">PPC智能广告生成器</h3>
               <p className="text-sm text-slate-500 mb-4">

@@ -4,7 +4,7 @@ export interface ChatMessage {
 }
 
 export interface ChatResponse {
-  message: string;
+  response: string;
   session_id?: string;
   intent: string;
   confidence: number;
@@ -12,6 +12,8 @@ export interface ChatResponse {
   should_transfer: boolean;
   compliance_blocked: boolean;
   rag_confidence?: number;
+  context_used?: Record<string, number>;
+  processing_time_ms?: number;
 }
 
 export interface ListingProduct {

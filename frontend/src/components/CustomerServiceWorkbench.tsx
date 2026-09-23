@@ -30,12 +30,12 @@ export default function CustomerServiceWorkbench() {
         <div className="w-[400px] bg-white border-l border-slate-200 shadow-2xl flex flex-col">
           <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-orange-50 to-red-50 shrink-0">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-800">👨‍💼 人工客服</h3>
+              <h3 className="font-semibold text-slate-800">人工客服</h3>
               <button
                 onClick={() => setShowPendingPanel(false)}
                 className="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"
               >
-                ✕
+                ×
               </button>
             </div>
             <p className="text-xs text-slate-500 mt-1">正在为您转接人工客服，请稍候...</p>

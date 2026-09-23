@@ -14,7 +14,8 @@
     export_to_csv / export_to_json: 数据导出
 """
 
-from app.services.agent import CustomerServiceAgent, IntentRouter, IntentType, detect_language
+from app.services.agent import CustomerServiceAgent
+from app.services.nlu import IntentRouter, IntentType, detect_language
 from app.services.compliance import ComplianceService, AuditLogger
 from app.services.generators import ListingGenerator, AdCampaignGenerator
 from app.services.analytics import (

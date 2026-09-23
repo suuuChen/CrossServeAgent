@@ -80,9 +80,9 @@ export default function ReviewDashboard() {
               <label className="text-xs text-slate-500 block mb-2">分析类型</label>
               <div className="space-y-2">
                 {[
-                  { value: 'sentiment', label: '😊 情感分析', desc: '正面/中性/负面比例' },
-                  { value: 'topics', label: '📌 主题聚类', desc: '自动识别讨论主题' },
-                  { value: 'keywords', label: '🔑 关键词提取', desc: '高频词汇统计' }
+                  { value: 'sentiment', label: '情感分析', desc: '正面/中性/负面比例' },
+                  { value: 'topics', label: '主题聚类', desc: '自动识别讨论主题' },
+                  { value: 'keywords', label: '关键词提取', desc: '高频词汇统计' }
                 ].map(type => (
                   <button
                     key={type.value}
@@ -107,7 +107,7 @@ export default function ReviewDashboard() {
               disabled={analyzing || (!reviewInput && !productUrl)}
               className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md"
             >
-              {analyzing ? '⏳ 分析中...' : '🔍 开始分析'}
+              {analyzing ? '分析中...' : '开始分析'}
             </button>
           </div>
         </div>
@@ -122,7 +122,7 @@ export default function ReviewDashboard() {
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
                   <div className="text-xs text-slate-500 mb-1">平均评分</div>
-                  <div className="text-2xl font-bold text-yellow-600">{results.avg_rating} ⭐</div>
+                  <div className="text-2xl font-bold text-yellow-600">{results.avg_rating}</div>
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
                   <div className="text-xs text-slate-500 mb-1">好评率</div>
@@ -131,12 +131,12 @@ export default function ReviewDashboard() {
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 className="font-semibold text-slate-800 mb-4">📊 情感分布</h3>
+                <h3 className="font-semibold text-slate-800 mb-4">情感分布</h3>
                 <div className="space-y-3">
                   {[
-                    { label: '😊 正面评价', value: results.sentiment_distribution.positive, color: 'bg-green-500' },
-                    { label: '😐 中性评价', value: results.sentiment_distribution.neutral, color: 'bg-yellow-500' },
-                    { label: '😠 负面评价', value: results.sentiment_distribution.negative, color: 'bg-red-500' }
+                    { label: '正面评价', value: results.sentiment_distribution.positive, color: 'bg-green-500' },
+                    { label: '中性评价', value: results.sentiment_distribution.neutral, color: 'bg-yellow-500' },
+                    { label: '负面评价', value: results.sentiment_distribution.negative, color: 'bg-red-500' }
                   ].map(item => (
                     <div key={item.label}>
                       <div className="flex justify-between text-sm mb-1">
@@ -152,7 +152,7 @@ export default function ReviewDashboard() {
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 className="font-semibold text-slate-800 mb-4">📌 热门话题</h3>
+                <h3 className="font-semibold text-slate-800 mb-4">热门话题</h3>
                 <div className="space-y-3">
                   {results.top_topics.map((topic: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
@@ -176,7 +176,7 @@ export default function ReviewDashboard() {
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 className="font-semibold text-slate-800 mb-4">💬 高频关键词</h3>
+                <h3 className="font-semibold text-slate-800 mb-4">高频关键词</h3>
                 <div className="flex flex-wrap gap-2">
                   {results.key_phrases.map((phrase: string, idx: number) => (
                     <span key={idx} className="px-3 py-1.5 bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-700 text-sm rounded-full border border-blue-200">
@@ -187,13 +187,13 @@ export default function ReviewDashboard() {
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 className="font-semibold text-slate-800 mb-4">🕐 最近评论</h3>
+                <h3 className="font-semibold text-slate-800 mb-4">最近评论</h3>
                 <div className="space-y-3">
                   {results.recent_reviews.map((review: any, idx: number) => (
                     <div key={idx} className="border-b border-slate-100 pb-3 last:border-0">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-yellow-500">{'⭐'.repeat(review.rating)}</span>
+                          <span className="text-yellow-500">{review.rating}分</span>
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                             review.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
                             review.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
@@ -213,7 +213,7 @@ export default function ReviewDashboard() {
           ) : (
             <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
               <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-4xl mb-4">
-                📊
+                评论
               </div>
               <h3 className="text-lg font-semibold text-slate-700 mb-2">竞品评论智能分析</h3>
               <p className="text-sm text-slate-500 mb-4">
