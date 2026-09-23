@@ -1,15 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import { chatApi } from '../api';
-import type { ChatMessage, ChatResponse } from '../types';
+import type { ChatMessage, ChatResponse, ConversationSummary } from '../types';
 
 interface ChatPanelProps {
   sessionId: string | null;
   onSessionChange: (sessionId: string) => void;
-  onTransfer: () => void;
+  onTransfer: (summary?: ConversationSummary) => void;
+}
+
+interface TranscriptMessage extends ChatMessage {
+  meta?: {
+    intent?: string;
+    confidence?: number;
+    transfer_reason?: string;
+    transfer_summary?: ConversationSummary;
+  };
 }
 
 export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<TranscriptMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -18,43 +27,52 @@ export default function ChatPanel({ sessionId, onSessionChange, onTransfer }: Ch
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 买家发送消息
   const handleSend = async (): Promise<void> => {
     const msg = input.trim();
     if (!msg || loading) return;
 
-    // 添加买家消息（左侧）
     setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setInput('');
     setLoading(true);
 
     try {
-      // 调用后端AI客服接口
       const response: ChatResponse = await chatApi.sendMessage(msg, 'auto', sessionId || undefined);
-      
-      // 显示AI客服回复（右侧）
-      setMessages(prev => [...prev, { role: 'assistant', content: response.response }]);
-      
-      // 保存会话ID
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response.response,
+        meta: {
+          intent: response.intent,
+          confidence: response.confidence,
+        },
+      }]);
+
       if (!sessionId && response.session_id) {
         onSessionChange(response.session_id);
       }
 
-      // 如果需要转人工
       if (response.should_transfer) {
-        // 显示转人工提示
+        const summary = response.conversation_summary;
+        const transferContent = summary
+          ? `您的问题已转接人工客服处理，摘要如下：\n${summary.summary}`
+          : '您的问题需要人工客服处理，正在为您转接，请稍候...';
+
         setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: '您的问题需要人工客服处理，正在为您转接，请稍候...' 
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: transferContent,
+            meta: {
+              transfer_reason: response.transfer_reason,
+              transfer_summary: summary,
+            },
           }]);
-          onTransfer();
+          onTransfer(summary);
         }, 500);
       }
     } catch (error) {
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: '抱歉，系统暂时繁忙，请稍后再试或直接联系我们的人工客服。' 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '抱歉，系统暂时繁忙，请稍后再试或直接联系我们的人工客服。',
       }]);
     } finally {
       setLoading(false);

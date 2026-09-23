@@ -6,8 +6,116 @@
 import re
 import json
 import random
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+
+
+HIGH_TRAFFIC_KEYWORDS = {
+    "electronics": [
+        ("wireless", "T1"), ("Bluetooth", "T1"), ("portable", "T1"),
+        ("rechargeable", "T2"), ("premium sound", "T2"), ("noise cancelling", "T1"),
+        ("long battery life", "T2"), ("fast charging", "T2"), ("4K", "T2"),
+        ("HD quality", "T3"), ("ergonomic", "T3"), ("lightweight", "T1"),
+        ("stereo", "T3"), ("waterproof", "T1"), ("USB-C", "T1"),
+        ("Smart", "T2"), ("LED", "T2"), ("universal", "T3"),
+    ],
+    "clothing": [
+        ("breathable", "T1"), ("stretchy", "T2"), ("comfortable", "T1"),
+        ("skin-friendly", "T2"), ("quick-dry", "T2"), ("slim fit", "T2"),
+        ("plus size", "T1"), ("lightweight", "T1"), ("durable", "T2"),
+        ("soft fabric", "T1"), ("all seasons", "T2"), ("classic", "T2"),
+        ("trendy", "T1"), ("versatile", "T2"), ("machine washable", "T3"),
+    ],
+    "home": [
+        ("space saving", "T1"), ("easy install", "T1"), ("durable", "T2"),
+        ("premium quality", "T1"), ("multifunctional", "T2"), ("modern", "T2"),
+        ("portable", "T1"), ("heavy duty", "T2"), ("stackable", "T3"),
+        ("waterproof", "T2"), ("heat resistant", "T3"), ("universal fit", "T2"),
+        ("non-slip", "T1"), ("eco-friendly", "T1"), ("reusable", "T2"),
+    ],
+    "beauty": [
+        ("hydrating", "T1"), ("anti-aging", "T1"), ("gentle", "T2"),
+        ("skin-friendly", "T2"), ("long-lasting", "T1"), ("vegan", "T2"),
+        ("cruelty-free", "T3"), ("organic", "T1"), ("natural", "T1"),
+        ("dermatologist tested", "T3"), ("no parabens", "T3"), ("moisturizing", "T2"),
+        ("brightening", "T2"), ("sensitive skin", "T2"),
+    ],
+    "outdoor": [
+        ("waterproof", "T1"), ("windproof", "T2"), ("lightweight", "T1"),
+        ("breathable", "T1"), ("UV protective", "T2"), ("quick-dry", "T2"),
+        ("heavy duty", "T2"), ("shockproof", "T2"), ("portable", "T1"),
+        ("foldable", "T2"), ("temperature resistant", "T3"), ("non-slip", "T1"),
+    ],
+    "general": [
+        ("premium quality", "T1"), ("durable", "T1"), ("portable", "T1"),
+        ("easy to use", "T1"), ("lightweight", "T1"), ("affordable", "T1"),
+        ("versatile", "T2"), ("multipurpose", "T2"), ("improved design", "T2"),
+        ("great value", "T2"), ("popular choice", "T2"), ("best seller", "T1"),
+    ],
+}
+
+CATEGORY_ALIAS = {
+    "electronics": ["电子", "数码", "audio", "headphone", "speaker", "phone", "device", "电子设备"],
+    "clothing": ["服装", "服饰", "衣服", "apparel", "clothing", "wear", "outfit", "t-shirt", "裤"],
+    "home": ["家居", "home", "kitchen", "kitchenware", "homeware", "家具", "装饰"],
+    "beauty": ["美妆", "beauty", "cosmetic", "skincare", "护肤", "makeup"],
+    "outdoor": ["户外", "运动", "outdoor", "sport", "camping", "hiking", "野外"],
+}
+
+
+def _match_category(category: str) -> str:
+    if not category:
+        return "general"
+    cat_lower = category.lower()
+    for key, aliases in CATEGORY_ALIAS.items():
+        for alias in aliases:
+            if alias in cat_lower or alias in category:
+                return key
+    if cat_lower in HIGH_TRAFFIC_KEYWORDS:
+        return cat_lower
+    return "general"
+
+
+async def _select_seo_keywords(
+    product: Dict,
+    top_n: int = 5,
+    embed_service=None,
+) -> List[Tuple[str, str, float]]:
+    product_cat = product.get("category", "") or ""
+    matched_cat = _match_category(product_cat)
+    pool = HIGH_TRAFFIC_KEYWORDS.get(matched_cat, HIGH_TRAFFIC_KEYWORDS["general"])
+
+    product_text = (
+        f"{product.get('name', '')} {product.get('description', '')} "
+        f"{product.get('category', '')} {' '.join(product.get('key_features', []))}"
+    ).strip()
+
+    if embed_service is None:
+        try:
+            from app.rag.embedding import embedding_service as embed_service
+        except Exception:
+            embed_service = None
+
+    if embed_service is None or not product_text:
+        picked = pool[:top_n]
+        return [(kw, tier, 1.0) for kw, tier in picked]
+
+    try:
+        product_vec = await embed_service.embed_text(product_text)
+        kw_list = [kw for kw, _ in pool]
+        kw_vecs = await embed_service.embed_texts(kw_list)
+
+        scored = []
+        for (kw, tier), vec in zip(pool, kw_vecs):
+            sim = embed_service.cosine_similarity(product_vec, vec)
+            tier_boost = {"T1": 0.08, "T2": 0.05, "T3": 0.02}.get(tier, 0.0)
+            scored.append((kw, tier, round(sim + tier_boost, 4)))
+
+        scored.sort(key=lambda x: x[2], reverse=True)
+        return scored[:top_n]
+    except Exception:
+        picked = pool[:top_n]
+        return [(kw, tier, 1.0) for kw, tier in picked]
 
 
 PLATFORM_TEMPLATES = {
@@ -44,7 +152,10 @@ PLATFORM_TEMPLATES = {
 }
 
 
-def _generate_title(product: Dict, platform: str, variant_num: int = 1) -> str:
+def _generate_title(
+    product: Dict, platform: str, variant_num: int = 1,
+    seo_keywords: List[str] = None,
+) -> str:
     templates = {
         "amazon": [
             "{brand} {name} - {key_feature} {category} for {audience}",
@@ -70,7 +181,7 @@ def _generate_title(product: Dict, platform: str, variant_num: int = 1) -> str:
     feature1 = features[0] if len(features) > 0 else product.get("description", "Premium Quality")[:30]
     feature2 = features[1] if len(features) > 1 else "Durable & Reliable"
 
-    return tmpl.format(
+    base = tmpl.format(
         brand=product.get("brand", "Premium"),
         name=product.get("name", "Product"),
         category=product.get("category", ""),
@@ -79,8 +190,20 @@ def _generate_title(product: Dict, platform: str, variant_num: int = 1) -> str:
         audience=product.get("target_audience", "Everyone")
     )
 
+    if seo_keywords:
+        top_kw = seo_keywords[:3]
+        kw_str = " | " + " ".join(top_kw)
+        max_chars = PLATFORM_TEMPLATES.get(platform, PLATFORM_TEMPLATES["amazon"])["title_max_chars"]
+        if len(base) + len(kw_str) <= max_chars:
+            base = base + kw_str
 
-def _generate_bullets(product: Dict, platform: str, variant_num: int = 1) -> List[str]:
+    return base
+
+
+def _generate_bullets(
+    product: Dict, platform: str, variant_num: int = 1,
+    seo_keywords: List[str] = None,
+) -> List[str]:
     feat_template = {
         "amazon": "{feature}",
         "temu": "{feature}",
@@ -104,10 +227,21 @@ def _generate_bullets(product: Dict, platform: str, variant_num: int = 1) -> Lis
     start_idx = (variant_num - 1) % max(1, len(features) - bullet_count + 1)
     selected = features[start_idx:start_idx + bullet_count]
 
-    return [feat_format.format(feature=f) for f in selected]
+    bullets = [feat_format.format(feature=f) for f in selected]
+
+    if seo_keywords:
+        for idx, _ in enumerate(bullets):
+            kw = seo_keywords[idx % len(seo_keywords)]
+            if kw.lower() not in bullets[idx].lower():
+                bullets[idx] = f"{bullets[idx]} — {kw}"
+
+    return bullets
 
 
-def _generate_description(product: Dict, platform: str, variant_num: int = 1) -> str:
+def _generate_description(
+    product: Dict, platform: str, variant_num: int = 1,
+    seo_keywords: List[str] = None,
+) -> str:
     style_map = {
         "amazon": (
             "Experience the perfect blend of quality and functionality with our {brand} {name}. "
@@ -132,13 +266,20 @@ def _generate_description(product: Dict, platform: str, variant_num: int = 1) ->
 
     template = style_map.get(platform, style_map["amazon"])
 
-    return template.format(
+    desc = template.format(
         brand=product.get("brand", "Premium"),
         name=product.get("name", "Product"),
         description=product.get("description", "Made with premium materials for lasting quality"),
         category=product.get("category", "Product"),
         audience=product.get("target_audience", "everyone")
     )
+
+    if seo_keywords:
+        head_kw = seo_keywords[:2]
+        kw_intro = f"Discover {' and '.join(head_kw)} with {product.get('name', 'our product')}. "
+        desc = kw_intro + desc
+
+    return desc
 
 
 def _generate_a_plus_content(product: Dict, platform: str) -> Optional[Dict]:
@@ -179,12 +320,13 @@ class ListingGenerator:
             cls._instance._cache = {}
         return cls._instance
 
-    def generate(
+    async def generate(
         self,
         product: Dict,
         platform: str = "amazon",
         variants: int = 1,
-        language: str = "en"
+        language: str = "en",
+        embed_service=None,
     ) -> Dict[str, Any]:
         if platform not in PLATFORM_TEMPLATES:
             raise ValueError(f"不支持的平台: {platform}，可选: {list(PLATFORM_TEMPLATES.keys())}")
@@ -193,12 +335,18 @@ class ListingGenerator:
             raise ValueError("变体数量必须在 1-5 之间")
 
         template = PLATFORM_TEMPLATES[platform]
+
+        seo_kw = await _select_seo_keywords(
+            product, top_n=5, embed_service=embed_service
+        )
+        seo_keyword_list = [kw for kw, _tier, _score in seo_kw]
+
         variant_results = []
 
         for i in range(1, variants + 1):
-            title = _generate_title(product, platform, i)
-            bullets = _generate_bullets(product, platform, i)
-            description = _generate_description(product, platform, i)
+            title = _generate_title(product, platform, i, seo_keyword_list)
+            bullets = _generate_bullets(product, platform, i, seo_keyword_list)
+            description = _generate_description(product, platform, i, seo_keyword_list)
             a_plus = _generate_a_plus_content(product, platform)
 
             variant_results.append({
@@ -207,6 +355,7 @@ class ListingGenerator:
                 "bullet_points": [b[:template["bullet_max_chars"]] for b in bullets],
                 "description": description[:template["description_max_chars"]],
                 "a_plus": a_plus,
+                "seo_keywords": [kw for kw, _tier, _score in seo_kw],
                 "char_counts": {
                     "title": len(title[:template["title_max_chars"]]),
                     "description": len(description[:template["description_max_chars"]]),
@@ -221,12 +370,16 @@ class ListingGenerator:
             "platform": platform,
             "platform_name": template["name"],
             "style_guide": template["style_guide"],
+            "seo_keywords": [
+                {"keyword": kw, "tier": tier, "relevance_score": score}
+                for kw, tier, score in seo_kw
+            ],
             "variants": variant_results,
             "generated_at": datetime.now().isoformat(),
             "total_variants": variants
         }
 
-    def batch_generate(
+    async def batch_generate(
         self,
         products: List[Dict],
         platform: str = "amazon",
@@ -235,7 +388,7 @@ class ListingGenerator:
         results = []
         for product in products:
             try:
-                listing = self.generate(product, platform, variants_per_product)
+                listing = await self.generate(product, platform, variants_per_product)
                 results.append({
                     "product_name": product.get("name", "Unknown"),
                     "sku": product.get("sku", ""),

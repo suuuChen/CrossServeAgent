@@ -363,3 +363,180 @@ class IntentRouter:
         }
         intent_templates = templates.get(intent, {})
         return intent_templates.get(language, intent_templates.get('zh', '正在处理您的请求...'))
+
+
+try:
+    from langgraph.graph import StateGraph, END
+    from typing import TypedDict, Optional as TypingOptional
+
+    _LANGGRAPH_AVAILABLE = True
+except ImportError:
+    _LANGGRAPH_AVAILABLE = False
+
+
+if _LANGGRAPH_AVAILABLE:
+
+    class RouterState(TypedDict, total=False):
+        query: str
+        hint_lang: TypingOptional[str]
+        detected_lang: str
+        lang_confidence: float
+        order_no: TypingOptional[str]
+        intent: IntentType
+        confidence: float
+        should_transfer: bool
+        transfer_reason: TypingOptional[str]
+        raw_scores: TypingOptional[dict]
+        transfer_keywords_hit: bool
+        greeting_hit: bool
+
+    class LangGraphIntentRouter:
+        """
+        基于 LangGraph StateGraph 的意图路由器
+
+        工作流:
+            START → detect_language → extract_order_no → match_keywords
+                 → check_transfer → decide → END
+
+        包装了原 IntentRouter 的多语言关键词匹配逻辑，
+        以 Graph 形式组织节点，便于扩展和调试。
+        """
+
+        def __init__(self):
+            self._base = IntentRouter()
+            self.graph = self._build_graph()
+
+        def _build_graph(self):
+            graph = StateGraph(RouterState)
+            graph.add_node("detect_language", self._node_detect_language)
+            graph.add_node("extract_order_no", self._node_extract_order_no)
+            graph.add_node("match_keywords", self._node_match_keywords)
+            graph.add_node("check_transfer", self._node_check_transfer)
+            graph.add_node("decide", self._node_decide_transfer)
+
+            graph.set_entry_point("detect_language")
+            graph.add_edge("detect_language", "extract_order_no")
+            graph.add_edge("extract_order_no", "match_keywords")
+            graph.add_edge("match_keywords", "check_transfer")
+            graph.add_edge("check_transfer", "decide")
+            graph.add_edge("decide", END)
+
+            return graph.compile()
+
+        def _node_detect_language(self, state: RouterState) -> dict:
+            lang, conf = detect_language(state["query"], hint=state.get("hint_lang"))
+            return {"detected_lang": lang, "lang_confidence": conf}
+
+        def _node_extract_order_no(self, state: RouterState) -> dict:
+            pattern = re.compile(r'(ORD[-–—]?\d{8}[-–—]?\d{3})', re.IGNORECASE)
+            m = pattern.search(state["query"])
+            return {"order_no": m.group(1).upper() if m else None}
+
+        def _node_match_keywords(self, state: RouterState) -> dict:
+            if state.get("order_no") or re.search(
+                r'(?:订单|order)\s*(?:号|no|number)',
+                state["query"].lower()
+            ):
+                return {
+                    "intent": IntentType.ORDER_QUERY,
+                    "confidence": 0.85,
+                }
+
+            query_lower = state["query"].lower()
+            lang = state.get("detected_lang", "zh")
+
+            best_intent = IntentType.GENERAL_FAQ
+            best_confidence = 0.0
+            scores = {}
+
+            for intent, lang_kw in self._base.intent_keywords.items():
+                keywords = lang_kw.get(lang, lang_kw.get("zh", []))
+                matches = sum(1 for kw in keywords if kw in query_lower)
+                if matches > 0:
+                    conf = min(0.9, 0.5 + matches * 0.1)
+                    scores[intent.value] = conf
+                    if conf > best_confidence:
+                        best_intent = intent
+                        best_confidence = conf
+
+            greeting_kws = {
+                "zh": ["你好", "您好", "hi", "hello", "在吗"],
+                "en": ["hello", "hi", "hey", "good morning"],
+                "es": ["hola", "buenos días", "saludos"],
+                "fr": ["bonjour", "salut"],
+                "de": ["hallo", "guten tag"],
+            }
+            greeting_words = greeting_kws.get(lang, greeting_kws.get("zh", []))
+            greeting_hit = best_confidence == 0.0 and any(w in query_lower for w in greeting_words)
+            if greeting_hit:
+                best_confidence = 0.3
+
+            return {
+                "intent": best_intent,
+                "confidence": best_confidence,
+                "raw_scores": scores,
+                "greeting_hit": greeting_hit,
+            }
+
+        def _node_check_transfer(self, state: RouterState) -> dict:
+            lang = state.get("detected_lang", "zh")
+            transfer_kws = {
+                "zh": ["转人工", "人工客服", "真人", "客服人员", "人工"],
+                "en": ["human agent", "speak to person", "real person", "transfer to human", "human support"],
+                "es": ["agente humano", "hablar con persona", "persona real", "servicio humano"],
+                "fr": ["agent humain", "parler à une personne", "vrai personne", "service humain"],
+                "de": ["menschlicher agent", "mit person sprechen", "echte person", "menschenkundenservice"],
+            }
+            words = transfer_kws.get(lang, transfer_kws.get("zh", []))
+            hit = any(w in state["query"].lower() for w in words)
+            return {"transfer_keywords_hit": hit}
+
+        def _node_decide_transfer(self, state: RouterState) -> dict:
+            if state.get("transfer_keywords_hit"):
+                return {
+                    "intent": IntentType.HUMAN_TRANSFER,
+                    "confidence": 0.95,
+                    "should_transfer": True,
+                    "transfer_reason": "用户明确要求转人工",
+                }
+
+            intent = state.get("intent", IntentType.GENERAL_FAQ)
+            conf = state.get("confidence", 0.0)
+
+            should_transfer = False
+            reason = None
+            if intent == IntentType.COMPLAINT:
+                should_transfer = True
+                reason = "检测到投诉意图，建议转人工处理"
+            elif conf < 0.4:
+                should_transfer = True
+                reason = f"系统置信度较低({conf:.2f})，建议转人工确保准确性"
+
+            return {
+                "should_transfer": should_transfer,
+                "transfer_reason": reason,
+            }
+
+        def route(self, query: str, language: str = None) -> dict:
+            initial: RouterState = {"query": query}
+            if language:
+                initial["hint_lang"] = language
+
+            try:
+                final = self.graph.invoke(initial)
+            except Exception:
+                return self._base.detect_intent(query, language or "zh")
+
+            intent = final.get("intent", IntentType.GENERAL_FAQ)
+            if isinstance(intent, str):
+                intent = IntentType(intent)
+
+            return {
+                "intent": intent,
+                "confidence": final.get("confidence", 0.0),
+                "language": final.get("detected_lang", language or "zh"),
+                "should_transfer": final.get("should_transfer", False),
+                "reason": final.get("transfer_reason"),
+                "order_no": final.get("order_no"),
+                "raw_scores": final.get("raw_scores"),
+            }

@@ -17,6 +17,20 @@ from app.rag.retriever import RAGRetriever
 from app.services.compliance import ComplianceService, AuditLogger
 from app.models.order import Order, OrderItem, Shipment
 
+try:
+    from app.services.nlu import LangGraphIntentRouter
+    from app.services.llm_agent import ALL_TOOLS, TOOL_MAP
+    _LANGGRAPH_AVAILABLE = True
+except ImportError:
+    _LANGGRAPH_AVAILABLE = False
+
+try:
+    from app.services.llm_agent import AgentStateGraph as _AgentStateGraph, is_available as _agent_graph_available
+    _AGENT_GRAPH_AVAILABLE = _agent_graph_available()
+except ImportError:
+    _AGENT_GRAPH_AVAILABLE = False
+    _AgentStateGraph = None
+
 
 class CustomerServiceAgent:
     """客服Agent类（对外统一接口）"""
@@ -26,9 +40,21 @@ class CustomerServiceAgent:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.rag_retriever = RAGRetriever(db)
-        self.intent_router = IntentRouter()
+        if _LANGGRAPH_AVAILABLE:
+            self.intent_router = LangGraphIntentRouter()
+        else:
+            self.intent_router = IntentRouter()
         self.compliance = ComplianceService()
         self.audit = AuditLogger()
+
+        self.agent_graph = None
+        if _AGENT_GRAPH_AVAILABLE:
+            try:
+                self.agent_graph = _AgentStateGraph(db=db)
+                print('[CustomerServiceAgent] AgentStateGraph (LLM Function Calling) 已启用')
+            except Exception as e:
+                print(f'[CustomerServiceAgent] AgentStateGraph 初始化失败, 回退: {e}')
+                self.agent_graph = None
 
     async def process_message(
         self,
@@ -77,94 +103,203 @@ class CustomerServiceAgent:
                     session_id, user_query, detected_lang, compliance_result, start_time
                 )
 
-            intent_result = self.intent_router.detect_intent(user_query, detected_lang)
+            agent_handled = False
+            agent_graph_result = None
 
-            if intent_result['intent'] == IntentType.ORDER_QUERY:
-                print(f"[Agent] Handling ORDER_QUERY intent for: {user_query[:50]}")
-                order_result = await self._handle_order_query(
-                    session_id, user_query, intent_result, detected_lang, start_time
+            if (
+                self.agent_graph is not None
+                and not settings.use_fast_mode
+            ):
+                try:
+                    turn_count = session.get('turn_count', 0)
+                    agent_graph_result = await self.agent_graph.ainvoke(
+                        query=user_query,
+                        language=detected_lang,
+                        turn_count=turn_count,
+                    )
+
+                    had_tool_call = agent_graph_result.get('had_tool_call', False)
+                    final_text = (agent_graph_result.get('final_text') or '').strip()
+                    ag_should_transfer = agent_graph_result.get('should_transfer', False)
+
+                    intent_for_audit = agent_graph_result.get('intent') or IntentType.GENERAL_FAQ
+                    if isinstance(intent_for_audit, str):
+                        try:
+                            intent_for_audit = IntentType(intent_for_audit)
+                        except Exception:
+                            intent_for_audit = IntentType.GENERAL_FAQ
+
+                    # 1) Function Calling 路径: LLM 自主调用了工具 + 生成了自然语言回复
+                    if had_tool_call and final_text:
+                        response_text = TimezoneService.append_timezone_promise(
+                            final_text, detected_lang
+                        )
+
+                        tool_names = [tc['name'] for tc in agent_graph_result.get('tool_calls_made', [])]
+
+                        await self._update_session_history(session_id, user_query, response_text)
+                        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+                        result = {
+                            'session_id': session_id,
+                            'response': response_text,
+                            'intent': intent_for_audit.value,
+                            'confidence': 0.95,
+                            'rag_confidence': 0.0,
+                            'language': detected_lang,
+                            'should_transfer': False,
+                            'processing_time_ms': int(processing_time),
+                            'context_used': {
+                                'products_found': 0,
+                                'faqs_found': 0,
+                                'orders_found': 1 if 'query_order' in tool_names else 0,
+                            },
+                            'success': True,
+                            'agent_mode': 'llm_function_calling',
+                            'tools_called': tool_names,
+                        }
+
+                        await AuditLogger.log_event(
+                            db=self.db,
+                            event_type="chat",
+                            session_id=session_id,
+                            user_query=user_query,
+                            response=response_text,
+                            intent=intent_for_audit.value,
+                            language=detected_lang,
+                            confidence=0.95,
+                            should_transfer=False,
+                            compliance_blocked=False,
+                            processing_time_ms=int(processing_time),
+                            extra={'tools_called': tool_names},
+                        )
+                        agent_handled = True
+                        return result
+
+                    # 2) AgentGraph 判断要转人工 (用户明确要求 / LLM 回复弱)
+                    if ag_should_transfer:
+                        intent_result_ag = {
+                            'intent': intent_for_audit,
+                            'confidence': 0.7,
+                            'should_transfer': True,
+                            'reason': agent_graph_result.get('transfer_reason') or 'AgentGraph 判断需转人工',
+                        }
+                        result = await self._handle_human_transfer(
+                            session_id, user_query, intent_result_ag, detected_lang, start_time
+                        )
+                        await AuditLogger.log_event(
+                            db=self.db,
+                            event_type="human_transfer",
+                            session_id=session_id,
+                            user_query=user_query,
+                            response=result.get('response'),
+                            intent=intent_for_audit.value,
+                            language=detected_lang,
+                            confidence=0.7,
+                            should_transfer=True,
+                            transfer_reason=agent_graph_result.get('transfer_reason'),
+                            processing_time_ms=result.get('processing_time_ms'),
+                            extra={'agent_mode': 'llm_function_calling'},
+                        )
+                        agent_handled = True
+                        return result
+
+                except Exception as e:
+                    print(f'[Agent] AgentGraph 执行异常, 回退到规则路由: {e}')
+                    agent_graph_result = None
+
+            if not agent_handled:
+                if hasattr(self.intent_router, "route"):
+                    intent_result = self.intent_router.route(user_query, detected_lang)
+                else:
+                    intent_result = self.intent_router.detect_intent(user_query, detected_lang)
+
+                if intent_result['intent'] == IntentType.ORDER_QUERY:
+                    print(f"[Agent] Handling ORDER_QUERY intent for: {user_query[:50]}")
+                    order_result = await self._handle_order_query(
+                        session_id, user_query, intent_result, detected_lang, start_time
+                    )
+
+                    await AuditLogger.log_event(
+                        db=self.db,
+                        event_type="chat",
+                        session_id=session_id,
+                        user_query=user_query,
+                        response=order_result.get('response'),
+                        intent=intent_result['intent'].value,
+                        language=detected_lang,
+                        confidence=intent_result['confidence'],
+                        should_transfer=False,
+                        compliance_blocked=False,
+                        processing_time_ms=order_result.get('processing_time_ms')
+                    )
+                    return order_result
+
+                if intent_result['should_transfer']:
+                    result = await self._handle_human_transfer(
+                        session_id, user_query, intent_result, detected_lang, start_time
+                    )
+
+                    await AuditLogger.log_event(
+                        db=self.db,
+                        event_type="human_transfer",
+                        session_id=session_id,
+                        user_query=user_query,
+                        response=result.get('response'),
+                        intent=intent_result['intent'].value,
+                        language=detected_lang,
+                        confidence=intent_result['confidence'],
+                        should_transfer=True,
+                        transfer_reason=intent_result.get('reason'),
+                        processing_time_ms=result.get('processing_time_ms')
+                    )
+                    return result
+
+                rag_result = await self.rag_retriever.retrieve_and_generate(
+                    user_query=user_query,
+                    language=detected_lang,
+                    conversation_history=session.get('history', [])
                 )
+
+                await self._update_session_history(
+                    session_id, user_query, rag_result['response']
+                )
+
+                processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+                result = {
+                    'session_id': session_id,
+                    'response': TimezoneService.append_timezone_promise(
+                        rag_result['response'], detected_lang
+                    ),
+                    'intent': intent_result['intent'].value,
+                    'confidence': intent_result['confidence'],
+                    'rag_confidence': rag_result.get('confidence_score', 0),
+                    'language': detected_lang,
+                    'should_transfer': False,
+                    'processing_time_ms': int(processing_time),
+                    'context_used': {
+                        'products_found': len(rag_result.get('context_used', {}).get('products', [])),
+                        'faqs_found': len(rag_result.get('context_used', {}).get('faqs', []))
+                    },
+                    'success': rag_result.get('success', True)
+                }
 
                 await AuditLogger.log_event(
                     db=self.db,
                     event_type="chat",
                     session_id=session_id,
                     user_query=user_query,
-                    response=order_result.get('response'),
+                    response=rag_result.get('response'),
                     intent=intent_result['intent'].value,
                     language=detected_lang,
                     confidence=intent_result['confidence'],
                     should_transfer=False,
                     compliance_blocked=False,
-                    processing_time_ms=order_result.get('processing_time_ms')
-                )
-                return order_result
-
-            if intent_result['should_transfer']:
-                result = await self._handle_human_transfer(
-                    session_id, user_query, intent_result, detected_lang, start_time
+                    processing_time_ms=int(processing_time)
                 )
 
-                await AuditLogger.log_event(
-                    db=self.db,
-                    event_type="human_transfer",
-                    session_id=session_id,
-                    user_query=user_query,
-                    response=result.get('response'),
-                    intent=intent_result['intent'].value,
-                    language=detected_lang,
-                    confidence=intent_result['confidence'],
-                    should_transfer=True,
-                    transfer_reason=intent_result.get('reason'),
-                    processing_time_ms=result.get('processing_time_ms')
-                )
                 return result
-
-            rag_result = await self.rag_retriever.retrieve_and_generate(
-                user_query=user_query,
-                language=detected_lang,
-                conversation_history=session.get('history', [])
-            )
-
-            await self._update_session_history(
-                session_id, user_query, rag_result['response']
-            )
-
-            processing_time = (datetime.now() - start_time).total_seconds() * 1000
-
-            result = {
-                'session_id': session_id,
-                'response': TimezoneService.append_timezone_promise(
-                    rag_result['response'], detected_lang
-                ),
-                'intent': intent_result['intent'].value,
-                'confidence': intent_result['confidence'],
-                'rag_confidence': rag_result.get('confidence_score', 0),
-                'language': detected_lang,
-                'should_transfer': False,
-                'processing_time_ms': int(processing_time),
-                'context_used': {
-                    'products_found': len(rag_result.get('context_used', {}).get('products', [])),
-                    'faqs_found': len(rag_result.get('context_used', {}).get('faqs', []))
-                },
-                'success': rag_result.get('success', True)
-            }
-
-            await AuditLogger.log_event(
-                db=self.db,
-                event_type="chat",
-                session_id=session_id,
-                user_query=user_query,
-                response=rag_result.get('response'),
-                intent=intent_result['intent'].value,
-                language=detected_lang,
-                confidence=intent_result['confidence'],
-                should_transfer=False,
-                compliance_blocked=False,
-                processing_time_ms=int(processing_time)
-            )
-
-            return result
 
         except Exception as e:
             print(f"Error processing message: {e}")
@@ -595,6 +730,7 @@ class CustomerServiceAgent:
         self, session_id, user_query, intent_result, language, start_time
     ) -> Dict:
         session = CustomerServiceAgent._sessions.get(session_id)
+        summary = await self._generate_conversation_summary(session_id, target_language=language)
         if session:
             session['status'] = 'pending_human'
             session['transfer_to_human'] = {
@@ -602,10 +738,9 @@ class CustomerServiceAgent:
                 'intent': intent_result['intent'].value,
                 'confidence': intent_result['confidence'],
                 'timestamp': datetime.now().isoformat(),
-                'summary': await self._generate_conversation_summary(session_id)
+                'summary': summary
             }
 
-        summary = await self._generate_conversation_summary(session_id)
         processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
         transfer_msgs = {
@@ -632,13 +767,35 @@ class CustomerServiceAgent:
             'success': True
         }
 
-    async def _generate_conversation_summary(self, session_id: str) -> Dict:
+    _EMOTION_I18N = {
+        'zh': {'angry': '愤怒', 'sad': '不满/失望', 'happy': '满意/感谢', 'neutral': '中性'},
+        'en': {'angry': 'angry', 'sad': 'disappointed', 'happy': 'satisfied/grateful', 'neutral': 'neutral'},
+        'es': {'angry': 'enojado', 'sad': 'insatisfecho/desanimado', 'happy': 'satisfecho/agradecido', 'neutral': 'neutral'},
+        'fr': {'angry': 'en colère', 'sad': 'mécontent/déçu', 'happy': 'satisfait/reconnaissant', 'neutral': 'neutre'},
+        'de': {'angry': 'wütend', 'sad': 'unzufrieden/enttäuscht', 'happy': 'zufrieden/dankbar', 'neutral': 'neutral'},
+    }
+
+    _INTENT_I18N = {
+        'zh': {'inquiry': '询单', 'shipping': '物流查询', 'return_refund': '退换货',
+               'complaint': '投诉', 'product_search': '商品搜索', 'human_transfer': '请求人工', 'greeting': '问候'},
+        'en': {'inquiry': 'inquiry', 'shipping': 'shipping', 'return_refund': 'return/refund',
+               'complaint': 'complaint', 'product_search': 'product search', 'human_transfer': 'human agent', 'greeting': 'greeting'},
+        'es': {'inquiry': 'consulta', 'shipping': 'envío', 'return_refund': 'devolución/reembolso',
+               'complaint': 'queja', 'product_search': 'búsqueda', 'human_transfer': 'agente humano', 'greeting': 'saludo'},
+        'fr': {'inquiry': 'demande', 'shipping': 'livraison', 'return_refund': 'retour/remboursement',
+               'complaint': 'réclamation', 'product_search': 'recherche', 'human_transfer': 'agent humain', 'greeting': 'salutation'},
+        'de': {'inquiry': 'Anfrage', 'shipping': 'Versand', 'return_refund': 'Rückgabe/Erstattung',
+               'complaint': 'Beschwerde', 'product_search': 'Suche', 'human_transfer': 'menschlicher Agent', 'greeting': 'Begrüßung'},
+    }
+
+    async def _generate_conversation_summary(self, session_id: str, target_language: str = 'zh') -> Dict:
         if session_id not in CustomerServiceAgent._sessions:
             return {
                 'turn_count': 0,
                 'user_queries': [],
                 'key_entities': {},
                 'emotion': 'neutral',
+                'emotion_translated': self._EMOTION_I18N.get(target_language, self._EMOTION_I18N['zh'])['neutral'],
                 'note': '新会话，无历史记录'
             }
 
@@ -653,6 +810,20 @@ class CustomerServiceAgent:
             order_nos.extend(matches)
 
         emotion = self._analyze_emotion(user_messages)
+        emotion_label = self._EMOTION_I18N.get(target_language, self._EMOTION_I18N['zh']).get(emotion, emotion)
+
+        order_text = ', '.join(list(set(order_nos))[:5]) if order_nos else '—'
+        queries_text = ' | '.join(user_messages[-5:]) if user_messages else '—'
+        turn_text = str(session.get('turn_count', 0))
+
+        templates = {
+            'zh': f'【人工客服摘要】共 {turn_text} 轮对话 · 买家情绪：{emotion_label} · 订单号：{order_text}\n买家原话（最近5条）：{queries_text}',
+            'en': f'[Human Agent Summary] {turn_text} turns · Buyer emotion: {emotion_label} · Order(s): {order_text}\nRecent 5 queries: {queries_text}',
+            'es': f'[Resumen para Agente Humano] {turn_text} turnos · Emoción del comprador: {emotion_label} · Pedido(s): {order_text}\nÚltimas 5 consultas: {queries_text}',
+            'fr': f'[Résumé pour Agent Humain] {turn_text} tours · Émotion: {emotion_label} · Commande(s): {order_text}\n5 dernières requêtes: {queries_text}',
+            'de': f'[Zusammenfassung für Menschlichen Agenten] {turn_text} Runden · Käuferemotion: {emotion_label} · Bestellung(en): {order_text}\nLetzte 5 Anfragen: {queries_text}',
+        }
+        translated_text = templates.get(target_language, templates['zh'])
 
         return {
             'turn_count': session.get('turn_count', 0),
@@ -662,7 +833,10 @@ class CustomerServiceAgent:
                 'detected_language': session.get('language_detected')
             },
             'emotion': emotion,
-            'session_status': session.get('status', 'normal')
+            'emotion_translated': emotion_label,
+            'session_status': session.get('status', 'normal'),
+            'summary_translated': translated_text,
+            'summary_language': target_language
         }
 
     def _analyze_emotion(self, user_messages: List[str]) -> str:

@@ -23,6 +23,7 @@ from app.api.schemas import (
     ListingGenerateRequest,
     BatchListingRequest,
     ReviewAnalyzeRequest,
+    NegativeAlertRequest,
     MockReviewGenerateRequest,
     AdGenerateRequest,
     QuickAdGenerateRequest
@@ -464,7 +465,7 @@ async def generate_listing(request: ListingGenerateRequest):
     try:
         from app.services.generators import ListingGenerator
         generator = ListingGenerator()
-        result = generator.generate(
+        result = await generator.generate(
             product=request.product.model_dump(),
             platform=request.platform,
             variants=request.variants,
@@ -483,7 +484,7 @@ async def batch_generate_listings(request: BatchListingRequest):
         from app.services.generators import ListingGenerator
         generator = ListingGenerator()
         products = [p.model_dump() for p in request.products]
-        result = generator.batch_generate(
+        result = await generator.batch_generate(
             products=products,
             platform=request.platform,
             variants_per_product=request.variants_per_product
@@ -501,10 +502,27 @@ async def analyze_reviews(request: ReviewAnalyzeRequest):
         from app.services.analytics import ReviewAnalyzer
         analyzer = ReviewAnalyzer()
         reviews = [r.model_dump() for r in request.reviews]
-        result = analyzer.analyze(reviews)
+        result = await analyzer.analyze_with_clustering(reviews)
         return {"success": True, "result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"评论分析失败: {str(e)}")
+
+
+@api_router.post("/reviews/negative-alert", tags=["评论分析"])
+async def negative_review_alert(request: NegativeAlertRequest):
+    try:
+        from app.services.analytics import ReviewAnalyzer
+        analyzer = ReviewAnalyzer()
+        reviews = [r.model_dump() for r in request.reviews]
+        result = analyzer.generate_negative_alert(
+            reviews=reviews,
+            product_label=request.product_label,
+            alert_threshold_pct=request.alert_threshold_pct,
+            keyword_freq_threshold=request.keyword_freq_threshold,
+        )
+        return {"success": True, "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"差评告警生成失败: {str(e)}")
 
 
 @api_router.get("/reviews/themes", tags=["评论分析"])
@@ -533,6 +551,103 @@ async def generate_mock_reviews(request: MockReviewGenerateRequest):
         return {"success": True, "reviews": reviews, "total": len(reviews)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成模拟评论失败: {str(e)}")
+
+
+@api_router.post("/reviews/crawl", tags=["评论分析"])
+async def crawl_platform_reviews(request: dict):
+    """
+    从电商平台爬取评论
+    body: {"platform": "amazon", "product_id": "ABC123", "max_reviews": 50}
+    支持平台: amazon, temu, tiktok_shop
+    无真实平台访问权限时自动降级为模拟数据
+    """
+    try:
+        from app.services.review_crawler import crawl_reviews
+        platform = request.get("platform", "amazon")
+        product_id = request.get("product_id", "")
+        max_reviews = int(request.get("max_reviews", 50))
+        result = await crawl_reviews(platform, product_id, max_reviews)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"爬取评论失败: {str(e)}")
+
+
+@api_router.post("/reviews/compare-crawl", tags=["评论分析"])
+async def compare_crawl_competitors(request: dict):
+    """
+    爬取多个商品评论并做竞品对比分析（一键完成）
+
+    body: {
+        "products": [
+            {"platform": "amazon", "product_id": "B08N5WRWNW", "label": "本店主款 Air Max Pro"},
+            {"platform": "amazon", "product_id": "B08XYYXXX", "label": "竞品A Nike Pegasus"},
+            {"platform": "temu",   "product_id": "6901234567",   "label": "竞品B Temu爆款"}
+        ],
+        "max_reviews": 50
+    }
+
+    返回: 各商品独立分析 + 情感差异 + 主题差异 + 排名
+    """
+    try:
+        from app.services.review_crawler import crawl_competitors
+        from app.services.analytics import ReviewAnalyzer
+
+        products = request.get("products", [])
+        max_reviews = int(request.get("max_reviews", 50))
+        if len(products) < 2:
+            raise HTTPException(status_code=400, detail="至少需要 2 个商品才能对比")
+
+        crawl_result = await crawl_competitors(products, max_reviews=max_reviews)
+        if not crawl_result.get("success"):
+            return crawl_result
+
+        reviews_map = {}
+        for p in crawl_result["products"]:
+            reviews_map[p["label"]] = p["reviews"]
+
+        analyzer = ReviewAnalyzer()
+        compare_result = analyzer.compare_products(reviews_map)
+
+        compare_result["crawl_info"] = {
+            "total_products": crawl_result["total_products"],
+            "total_reviews": crawl_result["total_reviews"],
+            "failed": crawl_result["failed"],
+            "sources": {p["label"]: p["source"] for p in crawl_result["products"]}
+        }
+        compare_result["crawled_at"] = crawl_result.get("crawled_at")
+
+        return {"success": True, **compare_result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"竞品对比分析失败: {str(e)}")
+
+
+@api_router.post("/reviews/compare", tags=["评论分析"])
+async def compare_reviews_direct(request: dict):
+    """
+    传入已有评论数据做对比（不需要爬取）
+
+    body: {
+        "reviews_by_product": {
+            "本店商品": [...],
+            "竞品A": [...],
+            "竞品B": [...]
+        }
+    }
+    """
+    try:
+        from app.services.analytics import ReviewAnalyzer
+        reviews_map = request.get("reviews_by_product", {})
+        if len(reviews_map) < 2:
+            raise HTTPException(status_code=400, detail="至少需要 2 个商品才能对比")
+        analyzer = ReviewAnalyzer()
+        result = analyzer.compare_products(reviews_map)
+        return {"success": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"评论对比分析失败: {str(e)}")
 
 
 # ==================== 广告词生成接口====================

@@ -6,10 +6,11 @@ RAG检索增强生成核心模块
 import time
 from typing import List, Dict, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
-from openai import OpenAI
 from app.config import settings
 from app.rag.vector_store import VectorStore
 from app.rag.embedding import embedding_service
+from app.services.nlu import IntentRouter
+from app.services.llm_agent import LLMToolRunner
 
 
 class RAGRetriever:
@@ -33,20 +34,9 @@ class RAGRetriever:
             db: 数据库会话
         """
         self.db = db
-        self.vector_store = VectorStore(db)  # 向量存储实例
-
-        # 根据配置选择LLM客户端
-        if settings.use_local_llm:
-            print(f"使用本地LLM: {settings.local_llm_model} @ {settings.local_llm_url}")
-            self.llm_client = OpenAI(
-                base_url=settings.local_llm_url,
-                api_key="ollama"  # Ollama不需要真实API Key
-            )
-            self.model_name = settings.local_llm_model
-        else:
-            print(f"使用OpenAI API: {settings.openai_model}")
-            self.llm_client = OpenAI(api_key=settings.openai_api_key)
-            self.model_name = settings.openai_model
+        self.vector_store = VectorStore(db)
+        self._tool_runner = LLMToolRunner(db=db)
+        self._intent_router = IntentRouter()
 
     async def retrieve_and_generate(
         self,
@@ -71,18 +61,39 @@ class RAGRetriever:
         start_time = time.time()  # 记录开始时间（用于计算耗时）
         
         try:
-            # ===== Step 1: 意图识别 =====
-            intent_result = await self._detect_intent(user_query)
+            # ===== Step 1: 意图识别（复用 IntentRouter） =====
+            intent_result = self._intent_router.detect_intent(user_query, language=language)
             intent = intent_result.get('intent', 'general')
-            
+            if hasattr(intent, 'value'):
+                intent = intent.value
+
             # ===== Step 2: RAG上下文检索 =====
             context = await self._retrieve_context(user_query, intent, language)
-            
+
             # ===== Step 3: 构建Prompt =====
             prompt = self._build_prompt(user_query, context, language, conversation_history)
-            
-            # ===== Step 4: LLM生成回复 =====
-            response = await self._generate_response(prompt, language)
+
+            # ===== Step 4: LLM生成回复（支持 Function Calling，复用 LLMToolRunner） =====
+            use_fast = getattr(settings, 'use_fast_mode', False)
+            tools_schema = LLMToolRunner.get_tools_schema()
+
+            if not use_fast and tools_schema:
+                messages = [
+                    {"role": "system", "content": f"You are a helpful multilingual customer service assistant. Respond in {language}. "
+                     f"You have access to tools for order lookup and shipment tracking. Use them when the user asks about orders or shipments."},
+                    {"role": "user", "content": prompt},
+                ]
+                llm_result = await self._tool_runner.call_llm_with_tools(
+                    messages=messages,
+                    tools=tools_schema,
+                    tool_choice='auto',
+                    max_tool_rounds=3,
+                    temperature=0.7,
+                    max_tokens=1000,
+                )
+                response = llm_result.get('final_text', '')
+            else:
+                response = await self._generate_response(prompt, language)
             
             # 计算总耗时
             processing_time = int((time.time() - start_time) * 1000)  # 转换为毫秒
@@ -119,43 +130,6 @@ class RAGRetriever:
                 "success": False,
                 "error": str(e)
             }
-
-    async def _detect_intent(self, query: str) -> Dict:
-        """
-        意图识别（基于关键词规则匹配）
-        
-        判断用户问题的类型，决定后续检索策略
-        
-        参数:
-            query: 用户输入文本
-            
-        返回:
-            dict: {"intent": 意图类型, "confidence": 置信度}
-            
-        支持的意图：
-        - order_query: 订单查询
-        - shipping_query: 物流查询
-        - return_policy: 退货政策咨询
-        - product_search: 商品搜索
-        - general_faq: 通用问题
-        """
-        query_lower = query.lower()
-        
-        # 关键词匹配（支持多语言）
-        if any(word in query_lower for word in ['订单', 'order', 'commande', 'pedido', 'bestellung']):
-            return {'intent': 'order_query', 'confidence': 0.9}
-        
-        elif any(word in query_lower for word in ['物流', 'tracking', 'suivi', 'seguimiento', 'verfolgung']):
-            return {'intent': 'shipping_query', 'confidence': 0.9}
-        
-        elif any(word in query_lower for word in ['退货', 'return', 'retour', 'devolución', 'rückgabe']):
-            return {'intent': 'return_policy', 'confidence': 0.85}
-        
-        elif any(word in query_lower for word in ['产品', '商品', 'product', 'produit', 'producto', 'produkt']):
-            return {'intent': 'product_search', 'confidence': 0.85}
-        
-        else:
-            return {'intent': 'general_faq', 'confidence': 0.7}  # 默认：通用问题
 
     async def _retrieve_context(
         self,
@@ -402,9 +376,9 @@ class RAGRetriever:
             return await self._fast_mode_response(prompt, language)
 
         try:
-            print(f"调用LLM生成回复: {self.model_name}")
-            response = self.llm_client.chat.completions.create(
-                model=self.model_name,  # 使用配置的模型（本地或云端）
+            print(f"调用LLM生成回复: {self._tool_runner.model_name}")
+            response = self._tool_runner.llm_client.chat.completions.create(
+                model=self._tool_runner.model_name,
                 messages=[
                     {"role": "system", "content": f"You are a helpful multilingual customer service assistant. Respond in {language}."},
                     {"role": "user", "content": prompt}

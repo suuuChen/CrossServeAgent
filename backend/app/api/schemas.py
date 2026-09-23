@@ -268,6 +268,14 @@ class ReviewAnalyzeRequest(BaseModel):
     reviews: List[ReviewInput] = Field(..., description="评论列表")
 
 
+class NegativeAlertRequest(BaseModel):
+    """差评关键词告警请求"""
+    reviews: List[ReviewInput] = Field(..., description="评论列表")
+    product_label: str = Field("当前商品", description="商品标签/名称，用于告警消息")
+    alert_threshold_pct: float = Field(25.0, ge=0.0, le=100.0, description="负面率告警阈值百分比")
+    keyword_freq_threshold: int = Field(3, ge=1, le=20, description="关键词触发告警的最低出现次数")
+
+
 class MockReviewGenerateRequest(BaseModel):
     """模拟评论生成请求"""
     count: int = Field(100, ge=10, le=1000, description="生成数量")

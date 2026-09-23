@@ -18,6 +18,14 @@ from sqlalchemy import select, func, extract
 
 from app.models.audit import AuditLog
 
+try:
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import normalize
+    import numpy as np
+    _CLUSTER_AVAILABLE = True
+except ImportError:
+    _CLUSTER_AVAILABLE = False
+
 
 SENTIMENT_KEYWORDS = {
     "positive": [
@@ -196,6 +204,91 @@ class ReviewAnalyzer:
             "generated_at": datetime.now().isoformat()
         }
 
+    async def analyze_with_clustering(self, reviews: List[Dict]) -> Dict[str, Any]:
+        """
+        主题聚类版 analyze：先用 embedding + KMeans 聚类，再做情感分析
+        """
+        result = self.analyze(reviews)
+
+        if not _CLUSTER_AVAILABLE or len(reviews) < 5:
+            result["clusters"] = None
+            result["clustering_method"] = "keyword_fallback"
+            return result
+
+        try:
+            from app.rag.embedding import embedding_service
+
+            texts = [r.get("content", r.get("text", "")) for r in reviews if r.get("content") or r.get("text")]
+            if len(texts) < 5:
+                result["clusters"] = None
+                result["clustering_method"] = "keyword_fallback"
+                return result
+
+            embeddings = await embedding_service.embed_texts(texts)
+            X = normalize(np.array(embeddings))
+
+            n_clusters = min(7, max(2, len(texts) // 15))
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(X)
+
+            clusters = []
+            for c_idx in range(n_clusters):
+                cluster_mask = labels == c_idx
+                cluster_texts = [texts[i] for i in range(len(texts)) if cluster_mask[i]]
+                cluster_sentiments = [result["analyzed_reviews"][i]["sentiment"] for i in range(len(texts)) if cluster_mask[i] and i < len(result["analyzed_reviews"])]
+
+                all_words = []
+                for t in cluster_texts:
+                    all_words.extend(re.findall(r'[a-zA-Z\u4e00-\u9fff]+', t.lower()))
+                word_freq = Counter(all_words)
+                stopwords = {"the", "a", "an", "is", "was", "it", "to", "of", "and", "in", "for", "on", "this", "that", "我", "的", "了", "是", "有", "和"}
+                top_words = [w for w, _ in word_freq.most_common(8) if w not in stopwords][:5]
+
+                cluster_label = self._name_cluster(top_words, cluster_texts)
+
+                sent_counts = Counter(cluster_sentiments) if cluster_sentiments else Counter()
+
+                clusters.append({
+                    "cluster_id": c_idx,
+                    "label": cluster_label,
+                    "size": int(cluster_mask.sum()),
+                    "percentage": round(cluster_mask.sum() / len(texts) * 100, 1),
+                    "top_keywords": top_words,
+                    "sample_reviews": cluster_texts[:3],
+                    "sentiment_distribution": {
+                        "positive": sent_counts.get("positive", 0),
+                        "negative": sent_counts.get("negative", 0),
+                        "neutral": sent_counts.get("neutral", 0),
+                    },
+                })
+
+            result["clusters"] = clusters
+            result["clustering_method"] = "kmeans+embedding"
+
+            cluster_dist = {c["label"]: c["size"] for c in clusters}
+            result["theme_distribution"] = cluster_dist
+            result["theme_list"] = list(cluster_dist.keys())
+
+        except Exception as e:
+            result["clusters"] = None
+            result["clustering_method"] = f"error: {str(e)}"
+
+        return result
+
+    @staticmethod
+    def _name_cluster(top_words: List[str], sample_texts: List[str]) -> str:
+        if not top_words:
+            return "未命名"
+        kw_to_theme = {}
+        for theme, keywords in THEME_KEYWORDS.items():
+            for kw in keywords:
+                kw_to_theme[kw] = theme
+        for word in top_words:
+            for kw, theme in kw_to_theme.items():
+                if kw in word or word in kw:
+                    return theme
+        return " + ".join(top_words[:2])
+
     def analyze_text(self, text: str) -> Dict:
         result = _analyze_single_review({"content": text})
         return {
@@ -316,6 +409,252 @@ class ReviewAnalyzer:
 
         return f"共分析 {total} 条评论，{overall}（正面 {pos_pct}%，负面 {neg_pct}%），" \
                f"主要讨论主题：{theme_str}，{rating_str}。"
+
+    def compare_products(self, reviews_by_product: Dict[str, List[Dict]]) -> Dict[str, Any]:
+        """
+        多商品（本店 vs 竞品）评论对比分析
+
+        参数:
+            reviews_by_product: {"本店商品A": [review1, review2, ...],
+                                 "竞品B": [...],
+                                 "竞品C": [...]}
+
+        返回:
+            dict: {
+                product_results: [...],          # 每个商品的独立分析结果
+                sentiment_diff: [...],           # 各商品之间的情感分布差异
+                theme_diff: [...],               # 各商品之间的主题覆盖率差异
+                overall_ranking: [...],          # 按正面率排名
+                summary: str
+            }
+        """
+        if not reviews_by_product or len(reviews_by_product) < 2:
+            return {
+                "success": False,
+                "error": "至少需要 2 个商品才能对比",
+                "product_results": [],
+                "sentiment_diff": [],
+                "theme_diff": [],
+                "overall_ranking": [],
+                "summary": ""
+            }
+
+        product_results = []
+        for label, reviews in reviews_by_product.items():
+            if not reviews:
+                product_results.append({
+                    "label": label,
+                    "total_reviews": 0,
+                    "sentiment_distribution": {"positive": 0, "negative": 0, "neutral": 0, "percentages": {}},
+                    "theme_distribution": {},
+                    "avg_rating": None,
+                })
+                continue
+            result = self.analyze(reviews)
+            result["label"] = label
+            product_results.append(result)
+
+        sentiment_diff = []
+        theme_diff = []
+
+        for i in range(len(product_results)):
+            for j in range(i + 1, len(product_results)):
+                a = product_results[i]
+                b = product_results[j]
+                a_pct = a.get("sentiment_distribution", {}).get("percentages", {})
+                b_pct = b.get("sentiment_distribution", {}).get("percentages", {})
+                diff = {
+                    "pair": [a["label"], b["label"]],
+                    "positive_diff_pct": round(a_pct.get("positive", 0) - b_pct.get("positive", 0), 1),
+                    "negative_diff_pct": round(a_pct.get("negative", 0) - b_pct.get("negative", 0), 1),
+                    "rating_diff": round((a.get("avg_rating") or 0) - (b.get("avg_rating") or 0), 2)
+                }
+                sentiment_diff.append(diff)
+
+                a_themes = set(a.get("theme_distribution", {}).keys())
+                b_themes = set(b.get("theme_distribution", {}).keys())
+                only_in_a = list(a_themes - b_themes)
+                only_in_b = list(b_themes - a_themes)
+                common = list(a_themes & b_themes)
+                theme_diff.append({
+                    "pair": [a["label"], b["label"]],
+                    "common_themes": common,
+                    "only_in_first": only_in_a,
+                    "only_in_second": only_in_b,
+                    "theme_coverage_a": f"{len(a_themes)}/{len(THEME_KEYWORDS)}",
+                    "theme_coverage_b": f"{len(b_themes)}/{len(THEME_KEYWORDS)}",
+                })
+
+        ranked = sorted(product_results, key=lambda x: x.get("sentiment_distribution", {}).get("percentages", {}).get("positive", 0), reverse=True)
+        overall_ranking = [
+            {
+                "rank": idx + 1,
+                "label": r["label"],
+                "positive_pct": r.get("sentiment_distribution", {}).get("percentages", {}).get("positive", 0),
+                "avg_rating": r.get("avg_rating"),
+                "total_reviews": r.get("total_reviews", 0)
+            }
+            for idx, r in enumerate(ranked)
+        ]
+
+        best = overall_ranking[0] if overall_ranking else None
+        worst = overall_ranking[-1] if len(overall_ranking) > 1 else None
+        summary_parts = []
+        if best:
+            summary_parts.append(f"正面率最高：{best['label']}（{best['positive_pct']}%）")
+        if worst and worst["label"] != best["label"]:
+            summary_parts.append(f"正面率最低：{worst['label']}（{worst['positive_pct']}%）")
+        for td in theme_diff:
+            if td["only_in_first"] or td["only_in_second"]:
+                summary_parts.append(
+                    f"主题差异：{td['pair'][0]} 独有主题 {td['only_in_first']}；"
+                    f"{td['pair'][1]} 独有主题 {td['only_in_second']}"
+                )
+        summary = "；".join(summary_parts) if summary_parts else "无明显差异"
+
+        return {
+            "success": True,
+            "product_results": product_results,
+            "sentiment_diff": sentiment_diff,
+            "theme_diff": theme_diff,
+            "overall_ranking": overall_ranking,
+            "summary": summary,
+            "generated_at": datetime.now().isoformat()
+        }
+
+    def generate_negative_alert(
+        self,
+        reviews: List[Dict],
+        product_label: str = "当前商品",
+        alert_threshold_pct: float = 25.0,
+        keyword_freq_threshold: int = 3,
+        top_n_keywords: int = 10,
+    ) -> Dict[str, Any]:
+        if not reviews:
+            return {
+                "success": True,
+                "has_alert": False,
+                "alert_level": "none",
+                "message": "无评论数据，无法生成告警",
+            }
+
+        analyzed = [self._analyze_single_review(r) for r in reviews]
+
+        negative_reviews = [r for r in analyzed if r.get("sentiment") == "negative"]
+        neutral_reviews = [r for r in analyzed if r.get("sentiment") == "neutral"]
+        positive_reviews = [r for r in analyzed if r.get("sentiment") == "positive"]
+
+        total = len(analyzed)
+        neg_pct = round(len(negative_reviews) / total * 100, 2) if total else 0.0
+
+        neg_keyword_counter: Counter = Counter()
+        for review in negative_reviews:
+            themes = review.get("themes", [])
+            for t in themes:
+                neg_keyword_counter[t] += 1
+
+        text_counter: Counter = Counter()
+        negative_word_bank = set(SENTIMENT_KEYWORDS["negative"])
+        for review in negative_reviews:
+            text = (review.get("text") or review.get("content") or "").lower()
+            if not text:
+                continue
+            for neg_kw in negative_word_bank:
+                if neg_kw.lower() in text:
+                    text_counter[neg_kw.lower()] += 1
+
+        top_themes = neg_keyword_counter.most_common(top_n_keywords)
+        top_neg_words = text_counter.most_common(top_n_keywords)
+
+        triggering_themes = [
+            {"theme": t, "count": c}
+            for t, c in top_themes if c >= keyword_freq_threshold
+        ]
+        triggering_keywords = [
+            {"keyword": k, "count": c}
+            for k, c in top_neg_words if c >= keyword_freq_threshold
+        ]
+
+        has_alert = neg_pct >= alert_threshold_pct or bool(triggering_keywords)
+
+        if not has_alert:
+            alert_level = "none"
+            message = f"{product_label} 负面率 {neg_pct}% 低于阈值 {alert_threshold_pct}%，暂无需告警"
+        elif neg_pct >= 50:
+            alert_level = "critical"
+            message = f"【严重告警】{product_label} 负面率高达 {neg_pct}%，请立即排查！"
+        elif neg_pct >= 35:
+            alert_level = "high"
+            message = f"【高优先级】{product_label} 负面率 {neg_pct}%，需要尽快处理"
+        else:
+            alert_level = "medium"
+            message = f"【中优先级】{product_label} 负面率 {neg_pct}%，建议关注"
+
+        sample_negative = [
+            {
+                "text": r.get("text") or r.get("content") or "",
+                "rating": r.get("rating"),
+                "themes": r.get("themes", []),
+                "sentiment_score": r.get("sentiment_score"),
+            }
+            for r in negative_reviews[:5]
+        ]
+
+        suggestions = self._build_alert_suggestions(
+            triggering_themes, triggering_keywords, neg_pct, product_label
+        )
+
+        return {
+            "success": True,
+            "product_label": product_label,
+            "has_alert": has_alert,
+            "alert_level": alert_level,
+            "message": message,
+            "alert_threshold_pct": alert_threshold_pct,
+            "summary": {
+                "total_reviews": total,
+                "positive_count": len(positive_reviews),
+                "neutral_count": len(neutral_reviews),
+                "negative_count": len(negative_reviews),
+                "negative_pct": neg_pct,
+            },
+            "top_negative_themes": top_themes,
+            "top_negative_keywords": top_neg_words,
+            "triggering_themes": triggering_themes,
+            "triggering_keywords": triggering_keywords,
+            "sample_negative_reviews": sample_negative,
+            "suggestions": suggestions,
+            "generated_at": datetime.now().isoformat(),
+        }
+
+    @staticmethod
+    def _build_alert_suggestions(
+        themes: List[Tuple[str, int]],
+        keywords: List[Tuple[str, int]],
+        neg_pct: float,
+        product_label: str,
+    ) -> List[str]:
+        suggestions: List[str] = []
+
+        theme_set = {t for t, _ in themes}
+        if "quality" in theme_set:
+            suggestions.append("质量问题集中出现，建议复查原材料供应商或生产工艺，必要时启动批次召回")
+        if "shipping" in theme_set:
+            suggestions.append("物流问题频发，考虑更换物流商或增加发货时效承诺")
+        if "size" in theme_set:
+            suggestions.append("尺码/尺寸频繁被投诉，建议在 Listing 中补充更详细的测量对照表")
+        if "service" in theme_set:
+            suggestions.append("客服服务相关投诉上升，建议组织客服专项培训")
+
+        if neg_pct >= 40:
+            suggestions.append("负面率超过 40%，建议暂停投放广告，优先解决核心问题后再重启")
+        if neg_pct >= 25 and neg_pct < 40:
+            suggestions.append("负面率处于中高区间，建议针对性回复差评并引导已解决的买家更新评价")
+
+        if not suggestions:
+            suggestions.append("保持当前运营策略，持续监控评论走势")
+
+        return suggestions
 
 
 class ReportService:
