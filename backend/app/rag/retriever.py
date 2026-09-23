@@ -43,6 +43,13 @@ class RAGRetriever:
                 api_key="ollama"  # Ollama不需要真实API Key
             )
             self.model_name = settings.local_llm_model
+        elif settings.use_glm:
+            print(f"☁️ 使用GLM API: {settings.glm_model}")
+            self.llm_client = OpenAI(
+                api_key=settings.glm_api_key,
+                base_url=settings.glm_base_url
+            )
+            self.model_name = settings.glm_model
         else:
             print(f"☁️ 使用OpenAI API: {settings.openai_model}")
             self.llm_client = OpenAI(api_key=settings.openai_api_key)

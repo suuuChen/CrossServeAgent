@@ -158,10 +158,14 @@ class ComplianceService:
         }
 
     def _llm_check(self, text: str, language: str = None) -> Optional[Dict]:
-        if not settings.openai_api_key:
+        api_key = settings.glm_api_key if settings.use_glm else settings.openai_api_key
+        if not api_key:
             return None
         try:
-            client = OpenAI(api_key=settings.openai_api_key)
+            client_kwargs = {"api_key": api_key}
+            if settings.use_glm:
+                client_kwargs["base_url"] = settings.glm_base_url
+            client = OpenAI(**client_kwargs)
             lang_note = f"text is in {language}" if language else "text may be mixed language"
 
             prompt = f"""请检查以下跨境电商客服对话内容是否包含违规信息。违规类型包括:
@@ -187,7 +191,7 @@ class ComplianceService:
 }}"""
 
             response = client.chat.completions.create(
-                model=settings.openai_model,
+                model=settings.glm_model if settings.use_glm else settings.openai_model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=200,

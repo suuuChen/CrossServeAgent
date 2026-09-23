@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 -- Create shipments table
 CREATE TABLE IF NOT EXISTS shipments (
     id SERIAL PRIMARY KEY,
-    order_id INTEGER REFERENCES orders(order_no),
+    order_id VARCHAR(50) REFERENCES orders(order_no),
     tracking_number VARCHAR(100),
     carrier VARCHAR(50),
     status VARCHAR(20),

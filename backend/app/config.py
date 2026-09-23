@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"  # 对话模型
     embedding_model: str = "text-embedding-3-large"  # 向量化模型
 
+    # 智谱 GLM API（OpenAI兼容接口）
+    use_glm: bool = False
+    glm_api_key: Optional[str] = None
+    glm_base_url: str = "https://open.bigmodel.cn/api/paas/v4/"
+    glm_model: str = "GLM-4.5-Air"
+    glm_embedding_model: str = "embedding-3"
+
     # 本地LLM (Ollama)
     use_local_llm: bool = False  # 是否使用本地部署的LLM
     local_llm_url: str = "http://localhost:11434/v1"  # Ollama API地址（OpenAI兼容）

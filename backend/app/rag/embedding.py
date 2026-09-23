@@ -18,8 +18,12 @@ class EmbeddingService:
 
     def __init__(self):
         """初始化OpenAI客户端"""
-        self.client = OpenAI(api_key=settings.openai_api_key)
-        self.model = settings.embedding_model  # 向量化模型名称
+        if settings.use_glm and settings.glm_api_key:
+            self.client = OpenAI(api_key=settings.glm_api_key, base_url=settings.glm_base_url)
+            self.model = settings.glm_embedding_model
+        else:
+            self.client = OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+            self.model = settings.embedding_model  # 向量化模型名称
         self.dimension = settings.vector_dimension  # 向量维度
 
     async def embed_text(self, text: str) -> List[float]:
@@ -32,6 +36,9 @@ class EmbeddingService:
         返回:
             1536维浮点数列表（失败时返回零向量）
         """
+        if self.client is None:
+            return [0.0] * self.dimension
+
         try:
             response = self.client.embeddings.create(
                 model=self.model,
@@ -52,6 +59,9 @@ class EmbeddingService:
         返回:
             向量列表（每个文本对应一个1536维向量）
         """
+        if self.client is None:
+            return [[0.0] * self.dimension for _ in texts]
+
         try:
             response = self.client.embeddings.create(
                 model=self.model,
